@@ -1,0 +1,32 @@
+name: MKS Protocol Smoke Test
+
+on: [push, pull_request]
+
+jobs:
+  test-app:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Streamlit Headless Test
+        env:
+          # This pulls the new keys you just added to GitHub Secrets
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          # Start streamlit in the background, wait 5 seconds, then kill it.
+          # If the app crashes on startup, the test fails.
+          nohup streamlit run tracker.py --server.headless true & 
+          sleep 5
+          pkill streamlit || exit 1
