@@ -1,5 +1,5 @@
 import streamlit as st
-from supabase import create_client, Client
+from supabase import create_client, Client, ClientOptions
 from datetime import datetime
 import pandas as pd
 import time
@@ -17,25 +17,45 @@ if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 
 # --- CONNECT TO SUPABASE ---
-try:
-    SUPABASE_URL = os.environ.get("SUPABASE_URL")
-    SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_KEY")
-
-    if not SUPABASE_URL and "SUPABASE_URL" in st.secrets:
-        SUPABASE_URL = st.secrets["SUPABASE_URL"]
+# --- CONNECT TO SUPABASE ---
+def get_secret(key_names):
+    """Try to find a secret in os.environ or st.secrets, checking multiple potential keys."""
+    if isinstance(key_names, str):
+        key_names = [key_names]
     
-    if not SUPABASE_KEY:
-        if "SUPABASE_SERVICE_KEY" in st.secrets:
-            SUPABASE_KEY = st.secrets["SUPABASE_SERVICE_KEY"]
-        elif "SUPABASE_KEY" in st.secrets:
-            SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+    for key in key_names:
+        # Check environment variables
+        if key in os.environ:
+            return os.environ[key]
+        
+        # Check st.secrets (flat)
+        if key in st.secrets:
+            return st.secrets[key]
+            
+        # Check st.secrets (nested under 'supabase')
+        if "supabase" in st.secrets and key in st.secrets["supabase"]:
+            return st.secrets["supabase"][key]
+            
+        # Check st.secrets (nested under 'SUPABASE')
+        if "SUPABASE" in st.secrets and key in st.secrets["SUPABASE"]:
+            return st.secrets["SUPABASE"][key]
 
-    if not SUPABASE_URL or not SUPABASE_KEY:
-        raise ValueError("Supabase credentials not found.")
+    return None
+
+try:
+    SUPABASE_URL = get_secret(["SUPABASE_URL", "URL"])
+    SUPABASE_KEY = get_secret(["SUPABASE_SERVICE_KEY", "SUPABASE_KEY", "KEY", "SERVICE_ROLE_KEY"])
+
+    if not SUPABASE_URL:
+        raise ValueError("Missing SUPABASE_URL in secrets/env.")
+    if not SUPABASE_KEY:
+        raise ValueError("Missing SUPABASE_KEY in secrets/env.")
 
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
     OFFLINE_MODE = False
 except Exception as e:
+    st.error(f"Connection Error: {e}")
+    st.caption("Please check your .streamlit/secrets.toml or Streamlit Cloud Secrets.")
     OFFLINE_MODE = True
 
 # --- AUTHENTICATION FUNCTIONS ---
