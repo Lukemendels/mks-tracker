@@ -326,8 +326,11 @@ with tab1:
         with c1:
             shot_shape = st.selectbox("Shape", ["Straight-to-Fade", "Hyzer Spike", "Flex/Anhyzer", "Hyzer Flip", "Roller", "Straight"])
         with c2:
-            rating = st.slider("Rating", 1, 5, 3)
-            
+           rating = st.slider(
+		"Confidence Level",
+		1, 5, 3,
+		help="1=Total Fluke/Fail, 3=50/50 Chance, 5=Guaranteed Repeatable"
+		)
         notes = st.text_area("Adjustment Notes", placeholder="e.g. Saint held straight, good height usage.")
         
         submitted = st.form_submit_button("💾 Save Data", use_container_width=True)
