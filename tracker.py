@@ -139,27 +139,30 @@ try:
 
         st.markdown(f"# 📋 The Protocol: Hole {hole_num}")
         
-        # Enhanced Markdown formatting for the hole strategy
+        # Enhanced Markdown formatting: catching both Shorts and Longs terminology
         if notes:
             parts = notes.split(". ")
             for p in parts:
-                if "Mindset:" in p: 
-                    st.markdown(f"## {p}")
+                if any(k in p for k in ["Mindset:", "Strategy:", "Plan:", "The Play:"]): 
+                    st.markdown(f"### 🧠 {p}")
                 elif "Disc:" in p: 
-                    st.markdown(f"## {p}")
-                elif "Execution:" in p: 
-                    st.markdown(f"## {p}")
+                    st.markdown(f"### 🥏 {p}")
+                elif any(k in p for k in ["Execution:", "Line:", "Geometry:"]): 
+                    st.markdown(f"### 🎯 {p}")
+                else:
+                    st.write(p)
 
-        # Axiom display logic using the linked table data
+        # Axiom display: The core of the MKS Tracker
         if axiom:
             st.divider()
-            st.markdown(f"### {axiom.get('short_name', 'Axiom')}: {axiom.get('title', 'Instruction')}")
-            st.markdown(f"#### \"{axiom.get('corollary', '')}\"")
+            st.success(f"**{axiom.get('short_name')}: {axiom.get('title')}**")
+            if axiom.get('corollary'):
+                st.info(f"*{axiom.get('corollary')}*")
             st.divider()
         else:
             st.info("No specific Mindset Axiom linked to this hole yet.")
     else:
-        st.warning("No protocol notes found for this selection.")
+        st.warning(f"No protocol notes found for Hole {hole_num} on {layout}.")
 except Exception as e:
     st.error(f"Error retrieving protocol: {e}")
 
