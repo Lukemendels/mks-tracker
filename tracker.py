@@ -8,6 +8,7 @@ import requests
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="MKS Tracker", page_icon="🥏", layout="wide")
 
+# --- INITIALIZE SESSION STATE ---
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 
@@ -20,59 +21,107 @@ try:
 except Exception as e:
     OFFLINE_MODE = True
 
-# --- AUTHENTICATION ---
+# --- AUTHENTICATION FUNCTIONS ---
 def login():
     st.title("🥏 MKS Protocol Login")
+    st.caption("Enter your Supabase credentials to access the Game Plan.")
     with st.form("login_form"):
         email = st.text_input("Email")
         password = st.text_input("Password", type="password")
-        if st.form_submit_button("Log In", use_container_width=True):
-            try:
-                response = supabase.auth.sign_in_with_password({"email": email, "password": password})
-                if response.user:
-                    st.session_state.logged_in = True
-                    st.rerun()
-            except Exception as e:
-                st.error(f"Login Failed: {e}")
+        submit = st.form_submit_button("Log In", use_container_width=True)
+        if submit:
+            if OFFLINE_MODE:
+                st.error("Cannot log in: Supabase secrets are missing.")
+            else:
+                try:
+                    response = supabase.auth.sign_in_with_password({"email": email, "password": password})
+                    if response.user:
+                        st.session_state.logged_in = True
+                        st.success("Login Successful!")
+                        time.sleep(0.5)
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Login Failed: {str(e)}")
 
+def logout():
+    try:
+        supabase.auth.sign_out()
+    except:
+        pass
+    st.session_state.logged_in = False
+    st.rerun()
+
+# --- WEATHER FUNCTIONS (CACHED) ---
+def get_wind_direction(degrees):
+    directions = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
+    index = round(degrees / (360. / len(directions))) % len(directions)
+    return directions[index]
+
+@st.cache_data(ttl=600)
+def get_loriella_weather():
+    URL = "https://api.open-meteo.com/v1/forecast?latitude=38.2544&longitude=-77.5443&current=temperature_2m,apparent_temperature,wind_speed_10m,wind_direction_10m,wind_gusts_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch"
+    try:
+        response = requests.get(URL)
+        data = response.json()
+        current = data['current']
+        return {
+            "temp": round(current['temperature_2m']),
+            "feels_like": round(current['apparent_temperature']),
+            "wind_speed": round(current['wind_speed_10m']),
+            "wind_gust": round(current['wind_gusts_10m']),
+            "wind_dir": get_wind_direction(current['wind_direction_10m'])
+        }
+    except Exception as e:
+        return None
+
+# --- AUTH GATEKEEPER ---
 if not st.session_state.logged_in:
     login()
     st.stop()
 
-# --- WEATHER (CACHED) ---
-@st.cache_data(ttl=600)
-def get_loriella_weather():
-    URL = "https://api.open-meteo.com/v1/forecast?latitude=38.2544&longitude=-77.5443&current=temperature_2m,wind_speed_10m,wind_direction_10m&temperature_unit=fahrenheit&wind_speed_unit=mph"
-    try:
-        data = requests.get(URL).json()['current']
-        return data
-    except: return None
-
-# --- SIDEBAR & TOURNAMENT MODE ---
+# --- SIDEBAR & GLOBAL SETTINGS ---
 with st.sidebar:
     st.title("🥏 MKS Control")
     tournament_mode = st.toggle("🏆 Tournament Mode", help="Hides entry forms to focus on execution.")
     if st.button("Log Out"):
-        supabase.auth.sign_out()
-        st.session_state.logged_in = False
-        st.rerun()
+        logout()
     st.divider()
-    
+
+    st.header("📍 Loriella Park Conditions")
     weather = get_loriella_weather()
     if weather:
-        st.metric("Temp", f"{weather['temperature_2m']}°F")
-        st.metric("Wind", f"{weather['wind_speed_10m']} mph")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.metric("Temp", f"{weather['temp']}°F", f"{weather['feels_like']}°F")
+        with c2:
+            st.metric("Wind", f"{weather['wind_speed']} mph", f"{weather['wind_dir']}")
     
     st.divider()
     layout = st.radio("Layout", ["Shorts (Round 1)", "Longs (Round 2)"])
+    
+    if not tournament_mode:
+        st.divider()
+        st.write("### 🎒 Bag Check")
+        bag_sections = {
+            "Putters": ["Watt (Putter)", "Zone (Approach)"],
+            "Mids": ["Caiman (Over)", "Mako3 (Neutral)", "Buzz (Neutral)"],
+            "Fairways": ["Leopard3 (Under)", "TL3 (Straight)", "Teebird (Stable)", "Saint (Control)", "Firebird (Utility)"],
+            "Distance": ["Trail (Glide)", "Wraith (Headwind)", "DX Destroyer (Max D)"]
+        }
+        for section, discs in bag_sections.items():
+            st.markdown(f"**{section}**")
+            for d in discs:
+                st.caption(f"• {d}")
 
 # --- MAIN UI ---
 st.title("The Mendelsohn Protocol")
-hole_num = st.number_input("Hole #", 1, 18, 1)
+st.markdown("**Target:** EVEN PAR")
 
-# 1. RETRIEVE RELATIONAL STRATEGY & AXIOM
+# Shared Hole Selection
+hole_num = st.number_input("Hole #", min_value=1, max_value=18, step=1, value=1)
+
+# 1. RETRIEVE STRATEGY & RELATIONAL AXIOM
 try:
-    # This query joins the metadata with the linked axiom
     resp = supabase.table("course_metadata")\
         .select("protocol_notes, mindset_axioms(short_name, title, corollary)")\
         .eq("hole_number", hole_num)\
@@ -84,52 +133,97 @@ try:
         notes = data['protocol_notes']
         axiom = data['mindset_axioms']
 
-        # Format Note Breakdown
         st.markdown(f"# 📋 The Protocol: Hole {hole_num}")
         
-        # Split logic for Mindset, Disc, Execution headers
-        for line in notes.split(". "):
-            if "Mindset:" in line: st.markdown(f"## {line}")
-            elif "Disc:" in line: st.markdown(f"## {line}")
-            elif "Execution:" in line: st.markdown(f"## {line}")
+        # Split logic for formatted display
+        parts = notes.split(". ")
+        for p in parts:
+            if "Mindset:" in p: st.markdown(f"## {p}")
+            elif "Disc:" in p: st.markdown(f"## {p}")
+            elif "Execution:" in p: st.markdown(f"## {p}")
 
-        # Axiom Display
         if axiom:
             st.divider()
             st.markdown(f"### {axiom['short_name']}: {axiom['title']}")
             st.markdown(f"#### \"{axiom['corollary']}\"")
             st.divider()
     else:
-        st.warning("No strategy linked for this hole.")
+        st.warning("No strategy found for this hole.")
 except Exception as e:
-    st.error(f"Data Error: {e}")
+    st.error(f"Error: {e}")
 
-# 2. ENTRY & ANALYSIS (OFF IN TOURNAMENT MODE)
+# 2. CONDITIONAL CONTENT
 if not tournament_mode:
-    tab1, tab2 = st.tabs(["📝 Entry", "📊 Review"])
+    tab1, tab2 = st.tabs(["📝 Hole Entry", "📊 Analysis"])
     
     with tab1:
-        with st.form("entry"):
-            disc = st.selectbox("Disc", ["Watt", "Zone", "Caiman", "Mako3", "Leopard3", "Teebird", "Firebird", "Trail", "Wraith"])
-            c1, c2 = st.columns(2)
-            with c1: strokes = st.number_input("Strokes", 1, 15, 3)
+        # Retrieve Last Practice result for this hole
+        db_note = None
+        if not OFFLINE_MODE:
+            try:
+                res = supabase.table("practice_notes")\
+                    .select("*")\
+                    .eq("hole_number", hole_num)\
+                    .eq("layout", layout)\
+                    .order("created_at", desc=True)\
+                    .limit(1)\
+                    .execute()
+                if res.data:
+                    db_note = res.data[0]
+            except: pass
+
+        if db_note:
+            with st.expander("🔍 Last Practice Result", expanded=False):
+                st.write(f"**Disc:** {db_note['disc_used']} | **Strokes:** {db_note.get('strokes', 'N/A')}")
+                st.markdown(f"*{db_note['notes']}*")
+
+        with st.form("entry_form"):
+            st.subheader(f"Log Practice: Hole {hole_num}")
+            all_discs = ["Watt", "Zone", "Caiman", "Mako3", "Buzz", "Leopard3", "TL3", "Teebird", "Saint", "Firebird", "Trail", "Wraith", "Destroyer"]
+            disc_choice = st.selectbox("Disc Used", all_discs)
+            c1, c2, c3 = st.columns(3)
+            with c1: shot_shape = st.selectbox("Shape", ["Straight", "Hyzer", "Anhyzer", "Flex", "Flip"])
             with c2: rating = st.slider("Confidence", 1, 5, 3)
-            notes = st.text_area("Adjustment Notes")
-            if st.form_submit_button("Save Data"):
-                entry = {
-                    "hole_number": hole_num, "layout": layout, "disc_used": disc,
-                    "strokes": strokes, "result_rating": rating, "notes": notes,
+            with c3: strokes = st.number_input("Strokes", 1, 15, 3)
+            notes_input = st.text_area("Adjustment Notes")
+            
+            if st.form_submit_button("💾 Save Data", use_container_width=True):
+                data_entry = {
+                    "hole_number": hole_num,
+                    "layout": layout,
+                    "disc_used": disc_choice,
+                    "result_rating": rating,
+                    "strokes": strokes,
+                    "notes": f"[{shot_shape}] {notes_input}",
                     "created_at": datetime.now().isoformat()
                 }
-                supabase.table("practice_notes").insert(entry).execute()
-                st.toast("Saved!")
-                time.sleep(0.5)
+                supabase.table("practice_notes").insert(data_entry).execute()
+                st.toast("Hole Saved!", icon="✅")
+                time.sleep(1)
                 st.rerun()
 
     with tab2:
-        res = supabase.table("practice_notes").select("*").eq("layout", layout).execute()
-        if res.data:
-            df = pd.DataFrame(res.data)
-            st.line_chart(df.groupby("hole_number")["strokes"].mean())
+        st.subheader("📊 Performance Review & Analysis")
+        view_layout = st.selectbox("Filter Analysis", ["Shorts (Round 1)", "Longs (Round 2)"])
+        try:
+            response = supabase.table("practice_notes").select("*").eq("layout", view_layout).execute()
+            if response.data:
+                df = pd.DataFrame(response.data)
+                
+                # Metrics
+                col_a, col_b = st.columns(2)
+                with col_a: st.metric("Avg Strokes", f"{df['strokes'].mean():.2f}")
+                with col_b: st.metric("Entries", len(df))
+
+                # Charts
+                st.write("### Disc Confidence (Avg Rating)")
+                st.bar_chart(df.groupby("disc_used")["result_rating"].mean())
+                
+                st.write("### Stroke Trends per Hole")
+                st.line_chart(df.groupby("hole_number")["strokes"].mean())
+            else:
+                st.info("No data logged for this layout.")
+        except Exception as e:
+            st.error(f"Error loading stats: {e}")
 else:
-    st.success("🏆 Tournament Mode Active: Focus on the Line.")
+    st.success("🏆 Tournament Mode Active. Focus on the Axioms. Execution only.")
