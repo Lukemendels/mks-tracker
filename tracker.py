@@ -35,6 +35,18 @@ try:
         raise ValueError("Supabase credentials not found.")
 
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    
+    # Restore session if it exists
+    if "supabase_session" in st.session_state:
+        try:
+            supabase.auth.set_session(
+                st.session_state.supabase_session.access_token, 
+                st.session_state.supabase_session.refresh_token
+            )
+        except Exception as e:
+            # Session might be expired
+            del st.session_state.supabase_session
+            
     OFFLINE_MODE = False
 except Exception as e:
     st.error(f"Connection Error: {e}")
@@ -57,6 +69,7 @@ def login():
                     response = supabase.auth.sign_in_with_password({"email": email, "password": password})
                     if response.user:
                         st.session_state.logged_in = True
+                        st.session_state.supabase_session = response.session
                         st.success("Login Successful!")
                         time.sleep(0.5)
                         st.rerun()
@@ -68,6 +81,8 @@ def logout():
         supabase.auth.sign_out()
     except:
         pass
+    if "supabase_session" in st.session_state:
+        del st.session_state.supabase_session
     st.session_state.logged_in = False
     st.rerun()
 
