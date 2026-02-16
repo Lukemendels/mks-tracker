@@ -4,6 +4,10 @@ from datetime import datetime
 import pandas as pd
 import time
 import requests
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="MKS Tracker", page_icon="🥏", layout="wide")
@@ -14,8 +18,21 @@ if 'logged_in' not in st.session_state:
 
 # --- CONNECT TO SUPABASE ---
 try:
-    SUPABASE_URL = st.secrets["SUPABASE_URL"]
-    SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+    SUPABASE_URL = os.environ.get("SUPABASE_URL")
+    SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_KEY")
+
+    if not SUPABASE_URL and "SUPABASE_URL" in st.secrets:
+        SUPABASE_URL = st.secrets["SUPABASE_URL"]
+    
+    if not SUPABASE_KEY:
+        if "SUPABASE_SERVICE_KEY" in st.secrets:
+            SUPABASE_KEY = st.secrets["SUPABASE_SERVICE_KEY"]
+        elif "SUPABASE_KEY" in st.secrets:
+            SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        raise ValueError("Supabase credentials not found.")
+
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
     OFFLINE_MODE = False
 except Exception as e:
@@ -50,6 +67,17 @@ def logout():
         pass
     st.session_state.logged_in = False
     st.rerun()
+
+@st.cache_data(ttl=3600)
+def get_bag():
+    """Fetch all discs from Supabase."""
+    if OFFLINE_MODE:
+        return []
+    try:
+        response = supabase.table("discs").select("*").order("name").execute()
+        return response.data if response.data else []
+    except Exception as e:
+        return []
 
 # --- WEATHER FUNCTIONS ---
 def get_wind_direction(degrees):
@@ -102,16 +130,32 @@ with st.sidebar:
     if not tournament_mode:
         st.divider()
         st.write("### 🎒 Bag Check")
-        bag_sections = {
-            "Putters": ["Watt (Putter)", "Zone (Approach)"],
-            "Mids": ["Caiman (Over)", "Mako3 (Neutral)", "Fox (Understable)"],
-            "Fairways": ["Leopard3 (Under)", "Teebird (Stable)", "Firebird (OS)", "Thunderbird (Stable)", "Heat (US)"],
-            "Distance": ["Trail (Control)", "Wraith (Max D)"]
-        }
-        for section, discs in bag_sections.items():
-            st.markdown(f"**{section}**")
-            for d in discs:
-                st.caption(f"• {d}")
+        
+        bag_data = get_bag()
+        if bag_data:
+            # Grouping logic
+            categories = {
+                "Putters": ["Putter", "Approach"],
+                "Mids": ["Midrange"],
+                "Fairways": ["Fairway Driver"],
+                "Distance": ["Distance Driver"]
+            }
+            
+            for cat_name, types in categories.items():
+                st.markdown(f"**{cat_name}**")
+                # Filter discs for this category
+                current_discs = [d for d in bag_data if d.get('disc_type') in types]
+                
+                for d in current_discs:
+                    # Format: Name (Plastic) - Speed/Glide/Turn/Fade
+                    flight_nums = f"{d.get('speed')}/{d.get('glide')}/{d.get('turn')}/{d.get('fade')}"
+                    # Handle decimals cleanly (e.g. 5.0 -> 5)
+                    flight_nums = flight_nums.replace('.0', '')
+                    
+                    note = f"• **{d['name']}** ({d.get('plastic', 'N/A')}) | *{flight_nums}*"
+                    st.caption(note)
+        else:
+            st.warning("No discs found in database.")
 
 # --- MAIN UI ---
 st.title("The Mendelsohn Protocol")
@@ -193,7 +237,11 @@ if not tournament_mode:
 
         with st.form("entry_form"):
             st.subheader(f"Log Practice: Hole {hole_num}")
-            all_discs = ["Watt", "Zone", "Caiman", "Mako3", "Fox", "Leopard3", "Teebird", "Firebird", "Thunderbird", "Heat", "Trail", "Wraith"]
+            
+            # Fetch discs for dropdown
+            bag_data = get_bag()
+            all_discs = [d['name'] for d in bag_data] if bag_data else ["Unknown"]
+            
             disc_choice = st.selectbox("Disc Used", all_discs)
             c1, c2, c3 = st.columns(3)
             with c1: shot_shape = st.selectbox("Shape", ["Straight", "Hyzer", "Anhyzer", "Flex", "Flip"])
