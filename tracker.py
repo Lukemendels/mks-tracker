@@ -86,7 +86,7 @@ def logout():
     st.session_state.logged_in = False
     st.rerun()
 
-@st.cache_data(ttl=3600)
+# @st.cache_data(ttl=3600) <- CAUSING ISSUES WITH AUTH STATE
 def get_bag():
     """Fetch all discs from Supabase."""
     if OFFLINE_MODE:
@@ -95,6 +95,7 @@ def get_bag():
         response = supabase.table("discs").select("*").order("name").execute()
         return response.data if response.data else []
     except Exception as e:
+        st.error(f"Error fetching discs: {e}")
         return []
 
 # --- WEATHER FUNCTIONS ---
