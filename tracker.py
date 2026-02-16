@@ -34,7 +34,6 @@ def login():
                 st.error("Cannot log in: Supabase secrets are missing.")
             else:
                 try:
-                    # sign_in_with_password is the correct method for the current Supabase-py
                     response = supabase.auth.sign_in_with_password({"email": email, "password": password})
                     if response.user:
                         st.session_state.logged_in = True
@@ -52,7 +51,7 @@ def logout():
     st.session_state.logged_in = False
     st.rerun()
 
-# --- WEATHER FUNCTIONS (CACHED) ---
+# --- WEATHER FUNCTIONS ---
 def get_wind_direction(degrees):
     directions = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
     index = round(degrees / (360. / len(directions))) % len(directions)
@@ -103,11 +102,10 @@ with st.sidebar:
     if not tournament_mode:
         st.divider()
         st.write("### 🎒 Bag Check")
-        # Updated to reflect your current MKS bag context
         bag_sections = {
-            "Putters": ["Watt (Neutral)", "Zone (OS Approach)"],
-            "Mids": ["Caiman (OS)", "Mako3 (Straight)", "Fox (US)"],
-            "Fairways": ["Leopard3 (US)", "Teebird (Stable)", "Firebird (OS Utility)", "Thunderbird (Stable)", "Heat (US)"],
+            "Putters": ["Watt (Putter)", "Zone (Approach)"],
+            "Mids": ["Caiman (Over)", "Mako3 (Neutral)", "Fox (Understable)"],
+            "Fairways": ["Leopard3 (Under)", "Teebird (Stable)", "Firebird (OS)", "Thunderbird (Stable)", "Heat (US)"],
             "Distance": ["Trail (Control)", "Wraith (Max D)"]
         }
         for section, discs in bag_sections.items():
@@ -124,6 +122,7 @@ hole_num = st.number_input("Hole #", min_value=1, max_value=18, step=1, value=1)
 
 # --- 1. RETRIEVE RELATIONAL STRATEGY & AXIOM ---
 try:
+    # Querying the metadata and joining the mindset_axioms table
     resp = supabase.table("course_metadata")\
         .select("protocol_notes, mindset_axioms(short_name, title, corollary)")\
         .eq("hole_number", hole_num)\
@@ -132,38 +131,44 @@ try:
 
     if resp.data:
         data = resp.data[0]
-        notes = data['protocol_notes']
-        axiom = data['mindset_axioms']
+        notes = data.get('protocol_notes', "")
+        
+        # Flattening logic: handles cases where axiom comes back as a single-item list
+        axiom_raw = data.get('mindset_axioms')
+        axiom = axiom_raw[0] if isinstance(axiom_raw, list) and len(axiom_raw) > 0 else axiom_raw
 
         st.markdown(f"# 📋 The Protocol: Hole {hole_num}")
         
         # Enhanced Markdown formatting for the hole strategy
-        parts = notes.split(". ")
-        for p in parts:
-            if "Mindset:" in p: 
-                st.markdown(f"## {p}")
-            elif "Disc:" in p: 
-                st.markdown(f"## {p}")
-            elif "Execution:" in p: 
-                st.markdown(f"## {p}")
+        if notes:
+            parts = notes.split(". ")
+            for p in parts:
+                if "Mindset:" in p: 
+                    st.markdown(f"## {p}")
+                elif "Disc:" in p: 
+                    st.markdown(f"## {p}")
+                elif "Execution:" in p: 
+                    st.markdown(f"## {p}")
 
         # Axiom display logic using the linked table data
         if axiom:
             st.divider()
-            st.markdown(f"### {axiom['short_name']}: {axiom['title']}")
-            st.markdown(f"#### \"{axiom['corollary']}\"")
+            st.markdown(f"### {axiom.get('short_name', 'Axiom')}: {axiom.get('title', 'Instruction')}")
+            st.markdown(f"#### \"{axiom.get('corollary', '')}\"")
             st.divider()
+        else:
+            st.info("No specific Mindset Axiom linked to this hole yet.")
     else:
-        st.warning("No strategy found for this hole.")
+        st.warning("No protocol notes found for this selection.")
 except Exception as e:
-    st.error(f"Error retrieving metadata: {e}")
+    st.error(f"Error retrieving protocol: {e}")
 
 # --- 2. CONDITIONAL CONTENT ---
 if not tournament_mode:
     tab1, tab2 = st.tabs(["📝 Hole Entry", "📊 Analysis"])
     
     with tab1:
-        # Retrieve Last Practice result for this hole
+        # Retrieve Last Practice result
         db_note = None
         if not OFFLINE_MODE:
             try:
@@ -215,16 +220,11 @@ if not tournament_mode:
             response = supabase.table("practice_notes").select("*").eq("layout", view_layout).execute()
             if response.data:
                 df = pd.DataFrame(response.data)
-                
-                # Metrics
                 col_a, col_b = st.columns(2)
                 with col_a: st.metric("Avg Strokes", f"{df['strokes'].mean():.2f}")
                 with col_b: st.metric("Entries", len(df))
-
-                # Charts
                 st.write("### Disc Confidence (Avg Rating)")
                 st.bar_chart(df.groupby("disc_used")["result_rating"].mean())
-                
                 st.write("### Stroke Trends per Hole")
                 st.line_chart(df.groupby("hole_number")["strokes"].mean())
             else:
