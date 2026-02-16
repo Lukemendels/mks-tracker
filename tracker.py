@@ -42,11 +42,17 @@ def get_secret(key_names):
 
     return None
 
+def clean_secret(secret):
+    """Remove whitespace and accidental quotes."""
+    if not secret:
+        return None
+    return secret.strip().strip("'").strip('"')
+
 try:
     # URL candidates: SUPABASE_URL, URL, url (in nested)
-    SUPABASE_URL = get_secret(["SUPABASE_URL", "URL", "url"])
+    SUPABASE_URL = clean_secret(get_secret(["SUPABASE_URL", "URL", "url"]))
     # Key candidates: SUPABASE_KEY, KEY, key, SUPABASE_SERVICE_KEY, SERVICE_ROLE_KEY, public_key, anon_key
-    SUPABASE_KEY = get_secret(["SUPABASE_KEY", "SUPABASE_SERVICE_KEY", "KEY", "key", "public_key", "anon_key"])
+    SUPABASE_KEY = clean_secret(get_secret(["SUPABASE_KEY", "SUPABASE_SERVICE_KEY", "KEY", "key", "public_key", "anon_key"]))
 
     if not SUPABASE_URL:
         raise ValueError("Missing SUPABASE_URL in secrets/env.")
