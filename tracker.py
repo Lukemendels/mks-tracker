@@ -3,6 +3,7 @@ from supabase import create_client, Client
 from datetime import datetime
 import pandas as pd
 import time
+import requests  # <--- NEW IMPORT
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="MKS Tracker", page_icon="🥏", layout="wide")
@@ -55,6 +56,30 @@ def logout():
         pass
     st.session_state.logged_in = False
     st.rerun()
+
+# --- WEATHER FUNCTIONS (NEW) ---
+def get_wind_direction(degrees):
+    directions = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
+    index = round(degrees / (360. / len(directions))) % len(directions)
+    return directions[index]
+
+def get_loriella_weather():
+    # Coordinates for Loriella Park, Fredericksburg, VA
+    URL = "https://api.open-meteo.com/v1/forecast?latitude=38.2544&longitude=-77.5443&current=temperature_2m,apparent_temperature,wind_speed_10m,wind_direction_10m,wind_gusts_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch"
+    try:
+        response = requests.get(URL)
+        data = response.json()
+        current = data['current']
+        
+        return {
+            "temp": round(current['temperature_2m']),
+            "feels_like": round(current['apparent_temperature']),
+            "wind_speed": round(current['wind_speed_10m']),
+            "wind_gust": round(current['wind_gusts_10m']),
+            "wind_dir": get_wind_direction(current['wind_direction_10m'])
+        }
+    except Exception as e:
+        return None
 
 # --- THE MENDELSOHN PROTOCOL (VERBATIM) ---
 DEFAULT_STRATEGIES = {
@@ -211,8 +236,25 @@ st.markdown("**Event:** Loriella Challenge (MA4) | **Target:** EVEN PAR")
 if OFFLINE_MODE:
     st.warning("⚠️ Offline Mode: Data will not save. Configure Supabase secrets to enable saving.")
 
-# --- SIDEBAR: SETTINGS ---
+# --- SIDEBAR: SETTINGS & WEATHER ---
 with st.sidebar:
+    # --- NEW WEATHER WIDGET ---
+    st.header("📍 Loriella Park Conditions")
+    weather = get_loriella_weather()
+    
+    if weather:
+        # Display Temp and Wind
+        c1, c2 = st.columns(2)
+        with c1:
+            st.metric("Temp", f"{weather['temp']}°F", f"{weather['feels_like']}°F (Feels)")
+        with c2:
+            st.metric("Wind", f"{weather['wind_speed']} mph", f"{weather['wind_dir']} (Gust {weather['wind_gust']})")
+    else:
+        st.warning("Weather data unavailable.")
+        
+    st.divider()
+    # --------------------------
+
     st.header("⚙️ Configuration")
     layout = st.radio("Select Layout", ["Shorts (Round 1)", "Longs (Round 2)"])
     
