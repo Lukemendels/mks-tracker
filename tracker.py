@@ -34,6 +34,7 @@ def login():
                 st.error("Cannot log in: Supabase secrets are missing.")
             else:
                 try:
+                    # sign_in_with_password is the correct method for the current Supabase-py
                     response = supabase.auth.sign_in_with_password({"email": email, "password": password})
                     if response.user:
                         st.session_state.logged_in = True
@@ -102,11 +103,12 @@ with st.sidebar:
     if not tournament_mode:
         st.divider()
         st.write("### 🎒 Bag Check")
+        # Updated to reflect your current MKS bag context
         bag_sections = {
-            "Putters": ["Watt (Putter)", "Zone (Approach)"],
-            "Mids": ["Caiman (Over)", "Mako3 (Neutral)", "Buzz (Neutral)"],
-            "Fairways": ["Leopard3 (Under)", "TL3 (Straight)", "Teebird (Stable)", "Saint (Control)", "Firebird (Utility)"],
-            "Distance": ["Trail (Glide)", "Wraith (Headwind)", "DX Destroyer (Max D)"]
+            "Putters": ["Watt (Neutral)", "Zone (OS Approach)"],
+            "Mids": ["Caiman (OS)", "Mako3 (Straight)", "Fox (US)"],
+            "Fairways": ["Leopard3 (US)", "Teebird (Stable)", "Firebird (OS Utility)", "Thunderbird (Stable)", "Heat (US)"],
+            "Distance": ["Trail (Control)", "Wraith (Max D)"]
         }
         for section, discs in bag_sections.items():
             st.markdown(f"**{section}**")
@@ -120,7 +122,7 @@ st.markdown("**Target:** EVEN PAR")
 # Shared Hole Selection
 hole_num = st.number_input("Hole #", min_value=1, max_value=18, step=1, value=1)
 
-# 1. RETRIEVE STRATEGY & RELATIONAL AXIOM
+# --- 1. RETRIEVE RELATIONAL STRATEGY & AXIOM ---
 try:
     resp = supabase.table("course_metadata")\
         .select("protocol_notes, mindset_axioms(short_name, title, corollary)")\
@@ -135,13 +137,17 @@ try:
 
         st.markdown(f"# 📋 The Protocol: Hole {hole_num}")
         
-        # Split logic for formatted display
+        # Enhanced Markdown formatting for the hole strategy
         parts = notes.split(". ")
         for p in parts:
-            if "Mindset:" in p: st.markdown(f"## {p}")
-            elif "Disc:" in p: st.markdown(f"## {p}")
-            elif "Execution:" in p: st.markdown(f"## {p}")
+            if "Mindset:" in p: 
+                st.markdown(f"## {p}")
+            elif "Disc:" in p: 
+                st.markdown(f"## {p}")
+            elif "Execution:" in p: 
+                st.markdown(f"## {p}")
 
+        # Axiom display logic using the linked table data
         if axiom:
             st.divider()
             st.markdown(f"### {axiom['short_name']}: {axiom['title']}")
@@ -150,9 +156,9 @@ try:
     else:
         st.warning("No strategy found for this hole.")
 except Exception as e:
-    st.error(f"Error: {e}")
+    st.error(f"Error retrieving metadata: {e}")
 
-# 2. CONDITIONAL CONTENT
+# --- 2. CONDITIONAL CONTENT ---
 if not tournament_mode:
     tab1, tab2 = st.tabs(["📝 Hole Entry", "📊 Analysis"])
     
@@ -179,7 +185,7 @@ if not tournament_mode:
 
         with st.form("entry_form"):
             st.subheader(f"Log Practice: Hole {hole_num}")
-            all_discs = ["Watt", "Zone", "Caiman", "Mako3", "Buzz", "Leopard3", "TL3", "Teebird", "Saint", "Firebird", "Trail", "Wraith", "Destroyer"]
+            all_discs = ["Watt", "Zone", "Caiman", "Mako3", "Fox", "Leopard3", "Teebird", "Firebird", "Thunderbird", "Heat", "Trail", "Wraith"]
             disc_choice = st.selectbox("Disc Used", all_discs)
             c1, c2, c3 = st.columns(3)
             with c1: shot_shape = st.selectbox("Shape", ["Straight", "Hyzer", "Anhyzer", "Flex", "Flip"])
