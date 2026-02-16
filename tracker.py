@@ -43,14 +43,18 @@ def get_secret(key_names):
     return None
 
 try:
-    SUPABASE_URL = get_secret(["SUPABASE_URL", "URL"])
-    SUPABASE_KEY = get_secret(["SUPABASE_SERVICE_KEY", "SUPABASE_KEY", "KEY", "SERVICE_ROLE_KEY"])
+    # URL candidates: SUPABASE_URL, URL, url (in nested)
+    SUPABASE_URL = get_secret(["SUPABASE_URL", "URL", "url"])
+    # Key candidates: SUPABASE_KEY, KEY, key, SUPABASE_SERVICE_KEY, SERVICE_ROLE_KEY, public_key, anon_key
+    SUPABASE_KEY = get_secret(["SUPABASE_KEY", "SUPABASE_SERVICE_KEY", "KEY", "key", "public_key", "anon_key"])
 
     if not SUPABASE_URL:
         raise ValueError("Missing SUPABASE_URL in secrets/env.")
     if not SUPABASE_KEY:
         raise ValueError("Missing SUPABASE_KEY in secrets/env.")
 
+    # Client options (optional, but good for debugging)
+    # options = ClientOptions(postgrest_client_timeout=10)
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
     OFFLINE_MODE = False
 except Exception as e:
