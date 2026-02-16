@@ -62,6 +62,7 @@ def get_wind_direction(degrees):
     index = round(degrees / (360. / len(directions))) % len(directions)
     return directions[index]
 
+@st.cache_data(ttl=600)  # PHASE 4: Implementation of Weather Caching
 def get_loriella_weather():
     URL = "https://api.open-meteo.com/v1/forecast?latitude=38.2544&longitude=-77.5443&current=temperature_2m,apparent_temperature,wind_speed_10m,wind_direction_10m,wind_gusts_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch"
     try:
@@ -131,18 +132,21 @@ with tab1:
         hole_num = st.number_input("Hole #", min_value=1, max_value=18, step=1, value=1)
     
     # 1. RETRIEVE STRATEGY FROM DATABASE
-    protocol_note = "No specific protocol found for this hole."
     try:
         meta_resp = supabase.table("course_metadata")\
             .select("protocol_notes")\
             .eq("hole_number", hole_num)\
             .eq("layout", layout)\
             .execute()
+        
         if meta_resp.data:
             protocol_note = meta_resp.data[0]['protocol_notes']
-            st.info(f"**📋 THE PROTOCOL (Hole {hole_num})**\n\n{protocol_note}")
+            # PHASE 4: Consistent Markdown Formatting
+            st.markdown(f"### 📋 The Protocol: Hole {hole_num}")
+            st.markdown(f"{protocol_note}")
+            st.divider()
         else:
-            st.warning(protocol_note)
+            st.warning("No specific protocol found for this hole.")
     except Exception as e:
         st.error(f"Error fetching protocol: {e}")
 
@@ -170,8 +174,6 @@ with tab1:
             if "strokes" in db_note:
                 st.write(f"**Strokes:** {db_note['strokes']}")
             st.markdown(f"**Notes:** *{db_note['notes']}*")
-
-    st.divider()
 
     # 4. INPUT FORM
     with st.form("entry_form"):
