@@ -379,6 +379,21 @@ if not tournament_mode:
                     "created_at": datetime.now().isoformat(),
                     "round_id": st.session_state.current_round['id'] if st.session_state.current_round else None
                 }
+            if st.form_submit_button("💾 Save Data", use_container_width=True):
+                data_entry = {
+                    "hole_number": hole_num,
+                    "layout": layout,
+                    "disc_used": disc_choice,
+                    "result_rating": rating,
+                    "strokes": strokes,
+                    "notes": f"[{shot_shape}] {notes_input}",
+                    "created_at": datetime.now().isoformat(),
+                    "round_id": st.session_state.current_round['id'] if st.session_state.current_round else None,
+                    # Auto-log Weather
+                    "temperature": weather['temp'] if weather else None,
+                    "wind_speed": weather['wind_speed'] if weather else None,
+                    "wind_direction": weather['wind_dir'] if weather else None
+                }
                 supabase.table("practice_notes").insert(data_entry).execute()
                 st.toast("Hole Saved!", icon="✅")
                 time.sleep(1)
