@@ -293,7 +293,7 @@ except Exception as e:
 
 # --- 2. CONDITIONAL CONTENT ---
 if not tournament_mode:
-    tab1, tab2 = st.tabs(["📝 Hole Entry", "📊 Analysis"])
+    tab1, tab2, tab3 = st.tabs(["📝 Hole Entry", "📊 Analysis", "📂 History & Export"])
     
     with tab1:
         # Retrieve Last Practice result
@@ -393,5 +393,63 @@ if not tournament_mode:
                 st.info("No data logged for this layout.")
         except Exception as e:
             st.error(f"Error loading stats: {e}")
+
+    with tab3:
+        st.subheader("📂 Round History & Export")
+        
+        # 1. Fetch Rounds
+        if not OFFLINE_MODE:
+            try:
+                rounds_res = supabase.table("rounds").select("*").order("created_at", desc=True).limit(20).execute()
+                rounds = rounds_res.data if rounds_res.data else []
+                
+                if rounds:
+                    # Select Round to Export
+                    round_names = [f"{r['name']} ({r['layout']})" for r in rounds]
+                    selected_round_name = st.selectbox("Select Round to Export", round_names)
+                    
+                    if selected_round_name:
+                        # Find selected round object
+                        selected_round = next(r for r in rounds if f"{r['name']} ({r['layout']})" == selected_round_name)
+                        
+                        # Fetch notes for this round
+                        notes_res = supabase.table("practice_notes").select("*").eq("round_id", selected_round['id']).execute()
+                        round_data = {
+                            "round_info": selected_round,
+                            "shots": notes_res.data if notes_res.data else []
+                        }
+                        
+                        st.write("### Round Data (JSON)")
+                        import json
+                        json_str = json.dumps(round_data, indent=2, default=str)
+                        st.code(json_str, language="json")
+                        
+                        st.download_button(
+                            label="📥 Download JSON",
+                            data=json_str,
+                            file_name=f"{selected_round['name']}.json",
+                            mime="application/json"
+                        )
+                        
+                    st.divider()
+                    st.write("### Bulk Export (Last 50 Rounds)")
+                    if st.button("Generate Bulk Export"):
+                        # Fetch all recent rounds + notes
+                        # Note: This is a heavy query, keeping it simple for now
+                        all_rounds = supabase.table("rounds").select("*, practice_notes(*)").order("created_at", desc=True).limit(50).execute()
+                        
+                        if all_rounds.data:
+                            bulk_json = json.dumps(all_rounds.data, indent=2, default=str)
+                            st.download_button(
+                                label="📥 Download Bulk Export",
+                                data=bulk_json,
+                                file_name=f"mks_bulk_export_{datetime.now().strftime('%Y%m%d')}.json",
+                                mime="application/json"
+                            )
+                else:
+                    st.info("No rounds recorded yet.")
+            except Exception as e:
+                st.error(f"Error fetching history: {e}")
+
 else:
     st.success("🏆 Tournament Mode Active. Focus on the Axioms. Execution only.")
