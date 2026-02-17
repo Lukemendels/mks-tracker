@@ -138,20 +138,6 @@ with st.sidebar:
         logout()
     st.divider()
 
-    # DEBUG: Check Auth status
-    with st.expander("🕵️ Debug Status", expanded=False):
-        user = supabase.auth.get_user()
-        st.write(f"Logged In: {st.session_state.get('logged_in')}")
-        st.write(f"User ID: {user.user.id if user and user.user else 'None'}")
-        st.write(f"Session Token: {'Present' if 'supabase_session' in st.session_state else 'Missing'}")
-        
-        # Test Fetch
-        try:
-             test_bag = supabase.table("discs").select("count", count="exact").execute()
-             st.write(f"Disc Count (DB): {test_bag.count}")
-        except Exception as e:
-             st.error(f"DB Error: {e}")
-
     st.header("📍 Loriella Park Conditions")
     weather = get_loriella_weather()
     if weather:
