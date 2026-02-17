@@ -243,7 +243,7 @@ hole_num = st.number_input("Hole #", min_value=1, max_value=18, step=1, value=1)
 try:
     # Querying the metadata and joining the mindset_axioms table
     resp = supabase.table("course_metadata")\
-        .select("protocol_notes, par, suggested_disc, Attack_Hole, mindset_axioms(short_name, title, corollary)")\
+        .select("protocol_notes, par, suggested_disc, Attack_Hole, shot_shape, execution_notes, mindset_axioms(short_name, title, corollary)")\
         .eq("hole_number", hole_num)\
         .eq("layout", layout)\
         .execute()
@@ -252,36 +252,51 @@ try:
     default_par = 3
     suggested_disc = None
     attack_hole = "No" # Default to No
+    suggested_shape = None
+    exec_notes = None
 
     if resp.data:
         data = resp.data[0]
-        notes = data.get('protocol_notes', "")
+        # notes = data.get('protocol_notes', "") # Legacy Column
         default_par = data.get('par', 3)
         suggested_disc = data.get('suggested_disc')
         attack_hole = data.get('Attack_Hole', "No")
+        suggested_shape = data.get('shot_shape')
+        exec_notes = data.get('execution_notes')
         
         # Flattening logic: handles cases where axiom comes back as a single-item list
         axiom_raw = data.get('mindset_axioms')
         axiom = axiom_raw[0] if isinstance(axiom_raw, list) and len(axiom_raw) > 0 else axiom_raw
 
-        st.markdown(f"# 📋 The Protocol: Hole {hole_num}")
+        # BASKET LOGIC
+        # Default: Shorts = Red, Longs = Yellow
+        # Exception: Holes 1, 3, 10 are always Red
+        basket_color = "Red"
+        if "Longs" in layout:
+             basket_color = "Yellow"
         
-        # Enhanced Markdown formatting: catching both Shorts and Longs terminology
-        if notes:
-            parts = notes.split(". ")
-            for p in parts:
-                if any(k in p for k in ["Mindset:", "Strategy:", "Plan:", "The Play:"]): 
-                    st.markdown(f"### 🧠 {p}")
-                # elif "Disc:" in p:  <-- REMOVED: We now use the structured column
-                #    st.markdown(f"### 🥏 {p}")
-                elif any(k in p for k in ["Execution:", "Line:", "Geometry:"]): 
-                    st.markdown(f"### 🎯 {p}")
-                elif "Disc:" not in p: # Skip legacy disc text if it exists
-                    st.write(p)
+        if hole_num in [1, 3, 10]:
+             basket_color = "Red"
+             
+        # Emoji mapping
+        basket_emoji = "🔴" if basket_color == "Red" else "🟡"
         
-        # Display Structured Disc Choice
+        st.markdown(f"# {basket_emoji} {basket_color} Basket: Hole {hole_num}")
+        
+        # Display Protocol
+        st.write("---")
+        
+        c1, c2 = st.columns([1, 2])
         if suggested_disc:
-            st.markdown(f"### 🥏 Disc: {suggested_disc}")
+            c1.markdown(f"**🥏 Disc**\n\n{suggested_disc}")
+        if suggested_shape:
+            c2.markdown(f"**📐 Shot Shape**\n\n{suggested_shape}")
+            
+        if exec_notes:
+             st.markdown(f"**🎯 Execution Notes**\n\n{exec_notes}")
+             
+        st.write("---")
+
 
         # Axiom display: The core of the MKS Tracker
         if axiom:
@@ -365,9 +380,15 @@ if not tournament_mode:
                 except ValueError:
                     pass # Suggested disc not in current bag
             
+            # DEFAULT SHAPE Logic
+            shape_options = ["Straight", "Hyzer", "Anhyzer", "Flex", "Flip"]
+            default_shape_index = 0
+            if suggested_shape and suggested_shape in shape_options:
+                default_shape_index = shape_options.index(suggested_shape)
+            
             disc_choice = st.selectbox("Disc Used", all_discs, index=default_disc_index)
             c1, c2, c3 = st.columns(3)
-            with c1: shot_shape = st.selectbox("Shape", ["Straight", "Hyzer", "Anhyzer", "Flex", "Flip"])
+            with c1: shot_shape = st.selectbox("Shape", shape_options, index=default_shape_index)
             with c2: rating = st.slider("Confidence", 1, 5, 3)
             with c3: strokes = st.number_input("Strokes", 1, 15, value=default_par)
             notes_input = st.text_area("Adjustment Notes")
