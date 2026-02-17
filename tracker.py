@@ -16,6 +16,10 @@ st.set_page_config(page_title="MKS Tracker", page_icon="🥏", layout="wide")
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 
+if 'current_round' not in st.session_state:
+    st.session_state.current_round = None
+
+
 # --- CONNECT TO SUPABASE ---
 # --- CONNECT TO SUPABASE ---
 # --- CONNECT TO SUPABASE ---
@@ -144,13 +148,65 @@ with st.sidebar:
             st.metric("Wind", f"{weather['wind_speed']} mph", f"{weather['wind_dir']}")
     
     st.divider()
-    layout = st.radio("Layout", ["Shorts (Round 1)", "Longs (Round 2)"])
+    st.divider()
+    
+    # --- ROUND MANAGEMENT ---
+    if st.session_state.current_round:
+        st.success(f"Ongoing Round\n\n**{st.session_state.current_round['name']}**")
+        layout = st.session_state.current_round['layout'] # Force layout to match round
+        st.caption(f"Layout: {layout}")
+        
+        if st.button("End Round", type="primary"):
+            st.session_state.current_round = None
+            st.rerun()
+    else:
+        st.subheader("🚀 Start New Round")
+        layout = st.radio("Layout", ["Shorts (Round 1)", "Longs (Round 2)"])
+        
+        # Bag Selection
+        all_discs_data = get_bag() # Fetch all to pick from
+        default_discs = [d['name'] for d in all_discs_data] if all_discs_data else []
+        
+        with st.expander("🎒 Bag Setup", expanded=False):
+            selected_bag = st.multiselect("Select Discs for Round", default_discs, default=default_discs)
+        
+        if st.button("Start Round", type="primary"):
+            round_name = f"{datetime.now().strftime('%m-%d-%y-%I%M%p')}-{layout.split(' ')[0]}"
+            
+            # Create Round in DB
+            new_round_id = None
+            if not OFFLINE_MODE:
+                try:
+                    res = supabase.table("rounds").insert({
+                        "name": round_name,
+                        "layout": layout,
+                        "selected_discs": selected_bag
+                    }).execute()
+                    if res.data:
+                        new_round_id = res.data[0]['id']
+                except Exception as e:
+                    st.error(f"Failed to start round: {e}")
+            
+            # Set Session
+            st.session_state.current_round = {
+                "id": new_round_id,
+                "name": round_name,
+                "layout": layout,
+                "selected_discs": selected_bag
+            }
+            st.rerun()
+
     
     if not tournament_mode:
         st.divider()
         st.write("### 🎒 Bag Check")
         
         bag_data = get_bag()
+        # Filter if round is active
+        if st.session_state.current_round and bag_data:
+             allowed = set(st.session_state.current_round['selected_discs'])
+             bag_data = [d for d in bag_data if d['name'] in allowed]
+             
         if bag_data:
             # Grouping logic
             categories = {
