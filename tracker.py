@@ -272,12 +272,16 @@ try:
             for p in parts:
                 if any(k in p for k in ["Mindset:", "Strategy:", "Plan:", "The Play:"]): 
                     st.markdown(f"### 🧠 {p}")
-                elif "Disc:" in p: 
-                    st.markdown(f"### 🥏 {p}")
+                # elif "Disc:" in p:  <-- REMOVED: We now use the structured column
+                #    st.markdown(f"### 🥏 {p}")
                 elif any(k in p for k in ["Execution:", "Line:", "Geometry:"]): 
                     st.markdown(f"### 🎯 {p}")
-                else:
+                elif "Disc:" not in p: # Skip legacy disc text if it exists
                     st.write(p)
+        
+        # Display Structured Disc Choice
+        if suggested_disc:
+            st.markdown(f"### 🥏 Disc: {suggested_disc}")
 
         # Axiom display: The core of the MKS Tracker
         if axiom:
