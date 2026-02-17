@@ -243,14 +243,20 @@ hole_num = st.number_input("Hole #", min_value=1, max_value=18, step=1, value=1)
 try:
     # Querying the metadata and joining the mindset_axioms table
     resp = supabase.table("course_metadata")\
-        .select("protocol_notes, mindset_axioms(short_name, title, corollary)")\
+        .select("protocol_notes, par, suggested_disc, mindset_axioms(short_name, title, corollary)")\
         .eq("hole_number", hole_num)\
         .eq("layout", layout)\
         .execute()
 
+    # Defaults
+    default_par = 3
+    suggested_disc = None
+
     if resp.data:
         data = resp.data[0]
         notes = data.get('protocol_notes', "")
+        default_par = data.get('par', 3)
+        suggested_disc = data.get('suggested_disc')
         
         # Flattening logic: handles cases where axiom comes back as a single-item list
         axiom_raw = data.get('mindset_axioms')
@@ -310,18 +316,47 @@ if not tournament_mode:
                 st.write(f"**Disc:** {db_note['disc_used']} | **Strokes:** {db_note.get('strokes', 'N/A')}")
                 st.markdown(f"*{db_note['notes']}*")
 
+        if st.session_state.current_round:
+            st.info(f"💾 Saving to Round: {st.session_state.current_round['name']}")
+
         with st.form("entry_form"):
             st.subheader(f"Log Practice: Hole {hole_num}")
             
-            # Fetch discs for dropdown
+            # Fetch discs and sort
             bag_data = get_bag()
+            
+            # Filter by active round
+            if st.session_state.current_round and bag_data:
+                allowed = set(st.session_state.current_round['selected_discs'])
+                bag_data = [d for d in bag_data if d['name'] in allowed]
+            
+            # Custom Sort Order: Fairway -> Distance -> Mid -> Putter
+            type_order = {
+                "Fairway Driver": 0, 
+                "Distance Driver": 1, 
+                "Midrange": 2, 
+                "Putter": 3, 
+                "Approach": 4
+            }
+            
+            if bag_data:
+                 bag_data.sort(key=lambda x: (type_order.get(x.get('disc_type', ''), 99), x['name']))
+
             all_discs = [d['name'] for d in bag_data] if bag_data else ["Unknown"]
             
-            disc_choice = st.selectbox("Disc Used", all_discs)
+            # Determine Index for Suggested Disc
+            default_disc_index = 0
+            if suggested_disc:
+                try:
+                    default_disc_index = all_discs.index(suggested_disc)
+                except ValueError:
+                    pass # Suggested disc not in current bag
+            
+            disc_choice = st.selectbox("Disc Used", all_discs, index=default_disc_index)
             c1, c2, c3 = st.columns(3)
             with c1: shot_shape = st.selectbox("Shape", ["Straight", "Hyzer", "Anhyzer", "Flex", "Flip"])
             with c2: rating = st.slider("Confidence", 1, 5, 3)
-            with c3: strokes = st.number_input("Strokes", 1, 15, 3)
+            with c3: strokes = st.number_input("Strokes", 1, 15, value=default_par)
             notes_input = st.text_area("Adjustment Notes")
             
             if st.form_submit_button("💾 Save Data", use_container_width=True):
@@ -332,7 +367,8 @@ if not tournament_mode:
                     "result_rating": rating,
                     "strokes": strokes,
                     "notes": f"[{shot_shape}] {notes_input}",
-                    "created_at": datetime.now().isoformat()
+                    "created_at": datetime.now().isoformat(),
+                    "round_id": st.session_state.current_round['id'] if st.session_state.current_round else None
                 }
                 supabase.table("practice_notes").insert(data_entry).execute()
                 st.toast("Hole Saved!", icon="✅")
