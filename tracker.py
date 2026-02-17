@@ -372,17 +372,7 @@ if not tournament_mode:
             with c3: strokes = st.number_input("Strokes", 1, 15, value=default_par)
             notes_input = st.text_area("Adjustment Notes")
             
-            if st.form_submit_button("💾 Save Data", use_container_width=True):
-                data_entry = {
-                    "hole_number": hole_num,
-                    "layout": layout,
-                    "disc_used": disc_choice,
-                    "result_rating": rating,
-                    "strokes": strokes,
-                    "notes": f"[{shot_shape}] {notes_input}",
-                    "created_at": datetime.now().isoformat(),
-                    "round_id": st.session_state.current_round['id'] if st.session_state.current_round else None
-                }
+
             if st.form_submit_button("💾 Save Data", use_container_width=True):
                 data_entry = {
                     "hole_number": hole_num,
