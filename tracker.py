@@ -243,7 +243,7 @@ hole_num = st.number_input("Hole #", min_value=1, max_value=18, step=1, value=1)
 try:
     # Querying the metadata and joining the mindset_axioms table
     resp = supabase.table("course_metadata")\
-        .select("protocol_notes, par, suggested_disc, mindset_axioms(short_name, title, corollary)")\
+        .select("protocol_notes, par, suggested_disc, Attack_Hole, mindset_axioms(short_name, title, corollary)")\
         .eq("hole_number", hole_num)\
         .eq("layout", layout)\
         .execute()
@@ -251,12 +251,14 @@ try:
     # Defaults
     default_par = 3
     suggested_disc = None
+    attack_hole = "No" # Default to No
 
     if resp.data:
         data = resp.data[0]
         notes = data.get('protocol_notes', "")
         default_par = data.get('par', 3)
         suggested_disc = data.get('suggested_disc')
+        attack_hole = data.get('Attack_Hole', "No")
         
         # Flattening logic: handles cases where axiom comes back as a single-item list
         axiom_raw = data.get('mindset_axioms')
@@ -283,9 +285,16 @@ try:
             st.success(f"**{axiom.get('short_name')}: {axiom.get('title')}**")
             if axiom.get('corollary'):
                 st.info(f"*{axiom.get('corollary')}*")
-            st.divider()
         else:
             st.info("No specific Mindset Axiom linked to this hole yet.")
+            
+        # Attack Hole Indicator
+        st.divider()
+        if attack_hole == "Yes":
+            st.success("🟢 **ATTACK HOLE**: Go for it! Be aggressive.")
+        else:
+            st.warning("⚠️ **SMART PLAY**: Play safe, hit your line, get the par, move on.")
+        st.divider()
     else:
         st.warning(f"No protocol notes found for Hole {hole_num} on {layout}.")
 except Exception as e:
