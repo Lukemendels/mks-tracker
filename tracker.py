@@ -5,6 +5,7 @@ import pandas as pd
 import time
 import requests
 import os
+import extra_streamlit_components as stx
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -12,12 +13,37 @@ load_dotenv()
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="MKS Tracker", page_icon="🥏", layout="wide")
 
+# --- INITIALIZE COOKIE MANAGER ---
+@st.cache_resource(experimental_allow_widgets=True)
+def get_manager():
+    return stx.CookieManager()
+
+cookie_manager = get_manager()
+
 # --- INITIALIZE SESSION STATE ---
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 
 if 'current_round' not in st.session_state:
     st.session_state.current_round = None
+
+# --- RESTORE SESSION FROM COOKIES ---
+# 1. Auth Restoration
+if not st.session_state.logged_in:
+    auth_token = cookie_manager.get('mks_refresh_token')
+    if auth_token:
+        try:
+             # Refresh Session
+             res = supabase.auth.refresh_session(auth_token)
+             if res.user:
+                 st.session_state.logged_in = True
+                 st.session_state.supabase_session = res.session
+                 st.success("Session Restored from Cookie! 🍪")
+        except Exception as e:
+            # Token invalid
+            # cookie_manager.delete('mks_refresh_token') # Optional cleanup
+            pass
+
 
 
 # --- CONNECT TO SUPABASE ---
@@ -74,6 +100,10 @@ def login():
                     if response.user:
                         st.session_state.logged_in = True
                         st.session_state.supabase_session = response.session
+                        
+                        # Save Refresh Token to Cookie (30 days)
+                        cookie_manager.set('mks_refresh_token', response.session.refresh_token, expires_at=datetime.now() + pd.Timedelta(days=30))
+                        
                         st.success("Login Successful!")
                         time.sleep(0.5)
                         st.rerun()
@@ -85,6 +115,12 @@ def logout():
         supabase.auth.sign_out()
     except:
         pass
+    
+    # clear cookies
+    cookie_manager.delete('mks_refresh_token')
+    cookie_manager.delete('mks_round_id')
+    cookie_manager.delete('mks_hole_num')
+    
     if "supabase_session" in st.session_state:
         del st.session_state.supabase_session
     st.session_state.logged_in = False
@@ -237,7 +273,20 @@ st.title("The Mendelsohn Protocol")
 st.markdown("**Target:** EVEN PAR")
 
 # Shared Hole Selection
-hole_num = st.number_input("Hole #", min_value=1, max_value=18, step=1, value=1)
+# Restore Hole from Cookie if available and not set manually in session
+default_hole = 1
+cookie_hole = cookie_manager.get('mks_hole_num')
+if cookie_hole:
+    try:
+        default_hole = int(cookie_hole)
+    except: pass
+
+# Callback to update cookie on change
+def update_hole_cookie():
+    cookie_manager.set('mks_hole_num', st.session_state.hole_input)
+
+hole_num = st.number_input("Hole #", min_value=1, max_value=18, step=1, value=default_hole, key="hole_input", on_change=update_hole_cookie)
+
 
 # --- 1. RETRIEVE RELATIONAL STRATEGY & AXIOM ---
 try:
