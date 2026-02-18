@@ -629,7 +629,7 @@ if not tournament_mode:
         if st.session_state.current_round:
             st.info(f"💾 Saving to Round: {st.session_state.current_round['name']}")
 
-        with st.form("entry_form"):
+        with st.container():
             st.subheader(f"Log Practice: Hole {hole_num}")
             
             # Fetch discs and sort
@@ -723,7 +723,7 @@ if not tournament_mode:
                     change_hole(-1)
                     st.rerun()
             with f2:
-                if st.form_submit_button("✅ Save & Next", use_container_width=True):
+                if st.button("✅ Save & Next", use_container_width=True, type="primary"):
                     data_entry = {
                         "hole_number": hole_num,
                         "layout": layout,
