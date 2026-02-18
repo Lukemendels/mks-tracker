@@ -294,7 +294,41 @@ with st.sidebar:
 
 # --- MAIN UI ---
 st.title("The Mendelsohn Protocol")
-st.markdown("**Target:** EVEN PAR")
+# --- MAIN UI ---
+st.title("The Mendelsohn Protocol")
+
+# Calculate Dynamic Target
+# Logic: Target = -1 * floor(Attack Holes / 2)
+# "50% of attack holes under par"
+target_score = "EVEN PAR"
+try:
+    if not OFFLINE_MODE:
+        # We need to know the layout context.
+        # If a round is active, use that layout.
+        # If not, we can default to the one selected in the sidebar (but that variable might not be in scope here if sidebar run first? Yes it is)
+        # Sidebar runs top-to-bottom. 'layout' is defined in sidebar.
+        
+        # Verify layout is defined (it should be from sidebar)
+        if 'layout' in locals() or 'layout' in globals():
+             # Count Attack Holes
+             res = supabase.table("course_metadata")\
+                 .select("id", count="exact")\
+                 .eq("layout", layout)\
+                 .eq("Attack_Hole", "Yes")\
+                 .execute()
+             
+             count = res.count
+             if count is not None:
+                 target_strokes = int(count // 2) # Floor division
+                 if target_strokes > 0:
+                     target_score = f"-{target_strokes}"
+                 else:
+                     target_score = "EVEN PAR"
+except Exception as e:
+    # Fallback
+    pass
+
+st.markdown(f"**Target:** {target_score}")
 
 # Shared Hole Selection
 # Restore Hole from Cookie if available and not set manually in session
