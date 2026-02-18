@@ -19,7 +19,8 @@ st.set_page_config(page_title="MKS Tracker", page_icon="🥏", layout="wide")
 st.markdown("""
 <style>
 /* iOS Sticky Footer */
-div[data-testid="stVerticalBlock"] > div:has(div.sticky-nav) {
+/* Target the specific container that holds the footer widgets */
+div[data-testid="stVerticalBlock"]:has(div.sticky-nav-marker):not(:has(div[data-testid="stVerticalBlock"])) {
     position: fixed;
     bottom: 0;
     left: 0;
@@ -32,6 +33,11 @@ div[data-testid="stVerticalBlock"] > div:has(div.sticky-nav) {
     padding-bottom: calc(1rem + env(safe-area-inset-bottom)); /* iOS Safe Area Fix */
     border-top: 1px solid #333;
     box-shadow: 0px -4px 10px rgba(0,0,0,0.5);
+}
+
+/* Add padding to the bottom of the main block so content isn't covered */
+div[data-testid="stAppViewContainer"] > section[data-testid="stMain"] > div[data-testid="stVerticalBlock"] {
+    padding-bottom: 120px;
 }
 
 /* Hide Streamlit Branding features for cleaner app feel */
@@ -709,48 +715,42 @@ if not tournament_mode:
             notes_input = st.text_area("Adjustment Notes", placeholder="What happened?")
             
             # --- STICKY FOOTER ---
-            # Wrapped in form submit button? No, the sticky footer needs to be outside the form if it contains navigation.
-            # But the "Save Data" button IS the submit button for the form.
-            # Streamlit forms cannot span outside containers easily. 
-            # Solution: We close the form here with the submit button, 
-            # BUT we want the buttons at the bottom.
-            # CSS handles the position. We just need to make sure it's inside the form if it's the submit button.
-            
-            st.markdown('<div class="sticky-nav">', unsafe_allow_html=True)
-            f1, f2, f3 = st.columns([1, 2, 1])
-            with f1:
-                if st.button("⬅️", use_container_width=True):
-                    change_hole(-1)
-                    st.rerun()
-            with f2:
-                if st.button("✅ Save & Next", use_container_width=True, type="primary"):
-                    data_entry = {
-                        "hole_number": hole_num,
-                        "layout": layout,
-                        "disc_used": disc_choice,
-                        "result_rating": rating,
-                        "strokes": st.session_state.current_score_input,
-                        "notes": f"[{shot_shape}] {notes_input}",
-                        "created_at": datetime.now(LOCAL_TZ).isoformat(),
-                        "round_id": st.session_state.current_round['id'] if st.session_state.current_round else None,
-                        # Auto-log Weather
-                        "temperature": weather['temp'] if weather else None,
-                        "wind_speed": weather['wind_speed'] if weather else None,
-                        "wind_gust": weather['wind_gust'] if weather else None,
-                        "wind_direction": weather['wind_dir'] if weather else None
-                    }
-                    supabase.table("practice_notes").insert(data_entry).execute()
-                    st.toast("Hole Saved!", icon="✅")
-                    
-                    # Auto Advance
-                    change_hole(1)
-                    time.sleep(0.5)
-                    st.rerun()
-            with f3:
-                 if st.button("➡️", use_container_width=True):
-                    change_hole(1)
-                    st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
+            # Use a container with a marker for CSS targeting
+            with st.container():
+                st.markdown('<div class="sticky-nav-marker"></div>', unsafe_allow_html=True)
+                f1, f2, f3 = st.columns([1, 2, 1])
+                with f1:
+                    if st.button("⬅️", use_container_width=True):
+                        change_hole(-1)
+                        st.rerun()
+                with f2:
+                    if st.button("✅ Save & Next", use_container_width=True, type="primary"):
+                        data_entry = {
+                            "hole_number": hole_num,
+                            "layout": layout,
+                            "disc_used": disc_choice,
+                            "result_rating": rating,
+                            "strokes": st.session_state.current_score_input,
+                            "notes": f"[{shot_shape}] {notes_input}",
+                            "created_at": datetime.now(LOCAL_TZ).isoformat(),
+                            "round_id": st.session_state.current_round['id'] if st.session_state.current_round else None,
+                            # Auto-log Weather
+                            "temperature": weather['temp'] if weather else None,
+                            "wind_speed": weather['wind_speed'] if weather else None,
+                            "wind_gust": weather['wind_gust'] if weather else None,
+                            "wind_direction": weather['wind_dir'] if weather else None
+                        }
+                        supabase.table("practice_notes").insert(data_entry).execute()
+                        st.toast("Hole Saved!", icon="✅")
+                        
+                        # Auto Advance
+                        change_hole(1)
+                        time.sleep(0.5)
+                        st.rerun()
+                with f3:
+                     if st.button("➡️", use_container_width=True):
+                        change_hole(1)
+                        st.rerun()
 
     with tab2:
         st.subheader("📊 Performance Review & Analysis")
