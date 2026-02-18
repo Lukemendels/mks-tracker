@@ -3,3 +3,5 @@ supabase
 pandas
 requests
 python-dotenv
+psycopg2-binary
+extra-streamlit-components
