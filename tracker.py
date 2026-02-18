@@ -14,11 +14,8 @@ load_dotenv()
 st.set_page_config(page_title="MKS Tracker", page_icon="🥏", layout="wide")
 
 # --- INITIALIZE COOKIE MANAGER ---
-@st.cache_resource
-def get_manager():
-    return stx.CookieManager()
-
-cookie_manager = get_manager()
+# --- INITIALIZE COOKIE MANAGER ---
+cookie_manager = stx.CookieManager()
 
 # --- INITIALIZE SESSION STATE ---
 if 'logged_in' not in st.session_state:
