@@ -441,13 +441,26 @@ try:
         basket_emoji = "🔴" if basket_color == "Red" else "🟡"
         
         # Attack Status for Header
+        # User Request: Attack = Green, Smart Play = Red
         if attack_hole == "Yes":
-           attack_status = ":red[🔴 ATTACK]"
-           status_color = "red"
-        else:
-           attack_status = ":green[🟢 SMART PLAY]"
+           attack_status = ":green[🟢 ATTACK]"
            status_color = "green"
+        else:
+           attack_status = ":red[🔴 SMART PLAY]"
+           status_color = "red"
         
+        # --- NAVIGATION (TOP) ---
+        # User Request: Below Target, Above Header
+        c_nav_prev, c_nav_spacer, c_nav_next = st.columns([1, 4, 1])
+        with c_nav_prev:
+            if st.button("⬅️", key="nav_prev_top", use_container_width=True):
+                change_hole(-1)
+                st.rerun()
+        with c_nav_next:
+            if st.button("➡️", key="nav_next_top", use_container_width=True):
+                change_hole(1)
+                st.rerun()
+
         # --- COMPACT HUD HEADER ---
         with st.container():
             c_hud_1, c_hud_2 = st.columns([2, 1])
@@ -482,6 +495,9 @@ except Exception as e:
 if mapper_mode:
     st.write("---")
     st.subheader("🗺️ Mapper Mode")
+    
+    # Display Basket Color for verification
+    st.info(f"🎯 Target Basket Color: **{basket_color}**")
     
     # 1. Check if already verified
     is_verified = False
@@ -575,16 +591,11 @@ if mapper_mode:
             if existing_geo and existing_geo.get('tee_lat'):
                 st.write(f"✅ {existing_geo['tee_lat']:.5f}, {existing_geo['tee_lon']:.5f}")
             
-            # Button for Tee
-            # Note: get_geolocation returns None initially, then a dict with 'coords'.
-            # We use a key to force uniqueness.
-            loc_tee = get_geolocation(component_key=f"gps_tee_{hole_num}_{layout}")
+             # Button for Tee
+            loc_tee = get_geolocation(component_key=f"gps_tee_{hole_num}_{layout}", btn_text="📍 Set Teepad")
             if loc_tee and 'coords' in loc_tee:
                 lat = loc_tee['coords']['latitude']
                 lon = loc_tee['coords']['longitude']
-                # Only save if different? Or just save.
-                # To avoid infinite loop, we check if we just saved this.
-                # We can store last_saved in session_state
                 
                 last_saved_key = f"last_saved_tee_{hole_num}_{layout}"
                 if st.session_state.get(last_saved_key) != f"{lat},{lon}":
@@ -592,11 +603,11 @@ if mapper_mode:
                      st.session_state[last_saved_key] = f"{lat},{lon}"
 
         with c2:
-            st.caption("Basket")
+            st.caption(f"Basket ({basket_color})")
             if existing_geo and existing_geo.get('basket_lat'):
                  st.write(f"✅ {existing_geo['basket_lat']:.5f}, {existing_geo['basket_lon']:.5f}")
             
-            loc_basket = get_geolocation(component_key=f"gps_basket_{hole_num}_{layout}")
+            loc_basket = get_geolocation(component_key=f"gps_basket_{hole_num}_{layout}", btn_text="🏁 Set Basket")
             if loc_basket and 'coords' in loc_basket:
                 lat = loc_basket['coords']['latitude']
                 lon = loc_basket['coords']['longitude']
@@ -718,39 +729,30 @@ if not tournament_mode:
             # Use a container with a marker for CSS targeting
             with st.container():
                 st.markdown('<div class="sticky-nav-marker"></div>', unsafe_allow_html=True)
-                f1, f2, f3 = st.columns([1, 2, 1])
-                with f1:
-                    if st.button("⬅️", use_container_width=True):
-                        change_hole(-1)
-                        st.rerun()
-                with f2:
-                    if st.button("✅ Save & Next", use_container_width=True, type="primary"):
-                        data_entry = {
-                            "hole_number": hole_num,
-                            "layout": layout,
-                            "disc_used": disc_choice,
-                            "result_rating": rating,
-                            "strokes": st.session_state.current_score_input,
-                            "notes": f"[{shot_shape}] {notes_input}",
-                            "created_at": datetime.now(LOCAL_TZ).isoformat(),
-                            "round_id": st.session_state.current_round['id'] if st.session_state.current_round else None,
-                            # Auto-log Weather
-                            "temperature": weather['temp'] if weather else None,
-                            "wind_speed": weather['wind_speed'] if weather else None,
-                            "wind_gust": weather['wind_gust'] if weather else None,
-                            "wind_direction": weather['wind_dir'] if weather else None
-                        }
-                        supabase.table("practice_notes").insert(data_entry).execute()
-                        st.toast("Hole Saved!", icon="✅")
-                        
-                        # Auto Advance
-                        change_hole(1)
-                        time.sleep(0.5)
-                        st.rerun()
-                with f3:
-                     if st.button("➡️", use_container_width=True):
-                        change_hole(1)
-                        st.rerun()
+                # Centered Save Button
+                if st.button("✅ Save & Next", use_container_width=True, type="primary"):
+                    data_entry = {
+                        "hole_number": hole_num,
+                        "layout": layout,
+                        "disc_used": disc_choice,
+                        "result_rating": rating,
+                        "strokes": st.session_state.current_score_input,
+                        "notes": f"[{shot_shape}] {notes_input}",
+                        "created_at": datetime.now(LOCAL_TZ).isoformat(),
+                        "round_id": st.session_state.current_round['id'] if st.session_state.current_round else None,
+                        # Auto-log Weather
+                        "temperature": weather['temp'] if weather else None,
+                        "wind_speed": weather['wind_speed'] if weather else None,
+                        "wind_gust": weather['wind_gust'] if weather else None,
+                        "wind_direction": weather['wind_dir'] if weather else None
+                    }
+                    supabase.table("practice_notes").insert(data_entry).execute()
+                    st.toast("Hole Saved!", icon="✅")
+                    
+                    # Auto Advance
+                    change_hole(1)
+                    time.sleep(0.5)
+                    st.rerun()
 
     with tab2:
         st.subheader("📊 Performance Review & Analysis")
