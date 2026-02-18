@@ -302,10 +302,31 @@ if cookie_hole:
     except: pass
 
 # Callback to update cookie on change
+# Callback to update cookie on change
 def update_hole_cookie():
     cookie_manager.set('mks_hole_num', st.session_state.hole_input)
 
-hole_num = st.number_input("Hole #", min_value=1, max_value=18, step=1, value=default_hole, key="hole_input", on_change=update_hole_cookie)
+# Ensure session state is initialized for the widget key
+if "hole_input" not in st.session_state:
+    st.session_state.hole_input = default_hole
+
+def change_hole(delta):
+    new_val = st.session_state.hole_input + delta
+    if 1 <= new_val <= 18:
+        st.session_state.hole_input = new_val
+        update_hole_cookie()
+
+# Mobile Navigation
+c_prev, c_curr, c_next = st.columns([1, 2, 1])
+if c_prev.button("⬅️", use_container_width=True):
+    change_hole(-1)
+    st.rerun()
+if c_next.button("➡️", use_container_width=True):
+    change_hole(1)
+    st.rerun()
+
+with c_curr:
+    hole_num = st.number_input("Hole #", min_value=1, max_value=18, step=1, key="hole_input", on_change=update_hole_cookie, label_visibility="collapsed")
 
 
 # --- 1. RETRIEVE RELATIONAL STRATEGY & AXIOM ---
@@ -350,7 +371,13 @@ try:
         # Emoji mapping
         basket_emoji = "🔴" if basket_color == "Red" else "🟡"
         
-        st.markdown(f"# {basket_emoji} {basket_color} Basket: Hole {hole_num}")
+        # Attack Status for Header
+        if attack_hole == "Yes":
+           attack_status = "🟢 ATTACK"
+        else:
+           attack_status = "⚠️ SMART PLAY"
+        
+        st.markdown(f"### {basket_emoji} {basket_color} Basket: Hole {hole_num} &nbsp;&nbsp;|&nbsp;&nbsp; {attack_status}")
         
         # Display Protocol
         st.write("---")
@@ -376,13 +403,6 @@ try:
         else:
             st.info("No specific Mindset Axiom linked to this hole yet.")
             
-        # Attack Hole Indicator
-        st.divider()
-        if attack_hole == "Yes":
-            st.success("🟢 **ATTACK HOLE**: Go for it! Be aggressive.")
-        else:
-            st.warning("⚠️ **SMART PLAY**: Play safe, hit your line, get the par, move on.")
-        st.divider()
     else:
         st.warning(f"No protocol notes found for Hole {hole_num} on {layout}.")
 except Exception as e:
