@@ -44,6 +44,26 @@ if not st.session_state.logged_in:
             # cookie_manager.delete('mks_refresh_token') # Optional cleanup
             pass
 
+# 2. Round Restoration
+if not st.session_state.current_round:
+    round_cookie = cookie_manager.get('mks_round_id')
+    if round_cookie:
+        # Fetch round details
+        try:
+             # Need to ensure supabase is ready (it is, unless offline)
+             if not OFFLINE_MODE:
+                 res = supabase.table("rounds").select("*").eq("id", round_cookie).execute()
+                 if res.data:
+                     st.session_state.current_round = res.data[0]
+                     # Ensure we have selected_discs in session_state format
+                     if 'selected_discs' not in st.session_state.current_round:
+                          st.session_state.current_round['selected_discs'] = []
+                 else:
+                     # Round not found (maybe deleted?), clear cookie
+                     cookie_manager.delete('mks_round_id')
+        except: pass
+
+
 
 
 # --- CONNECT TO SUPABASE ---
@@ -194,6 +214,7 @@ with st.sidebar:
         
         if st.button("End Round", type="primary"):
             st.session_state.current_round = None
+            cookie_manager.delete('mks_round_id')
             st.rerun()
     else:
         st.subheader("🚀 Start New Round")
@@ -230,6 +251,8 @@ with st.sidebar:
                 "layout": layout,
                 "selected_discs": selected_bag
             }
+            if new_round_id:
+                cookie_manager.set('mks_round_id', new_round_id, expires_at=datetime.now() + pd.Timedelta(days=1))
             st.rerun()
 
     
