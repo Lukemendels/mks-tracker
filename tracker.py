@@ -465,7 +465,7 @@ try:
         with st.container():
             c_hud_1, c_hud_2 = st.columns([2, 1])
             with c_hud_1:
-                st.markdown(f"## Hole {hole_num} | Par {default_par}")
+                st.markdown(f"## Hole {hole_num} | Par {default_par} | {basket_color} Basket")
             with c_hud_2:
                 st.markdown(f"### {attack_status}")
         
