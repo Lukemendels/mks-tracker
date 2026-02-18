@@ -194,11 +194,13 @@ with st.sidebar:
     st.header("📍 Loriella Park Conditions")
     weather = get_loriella_weather()
     if weather:
-        c1, c2 = st.columns(2)
+        c1, c2, c3 = st.columns(3)
         with c1:
             st.metric("Temp", f"{weather['temp']}°F", f"{weather['feels_like']}°F")
         with c2:
-            st.metric("Wind", f"{weather['wind_speed']} mph", f"Gust: {weather['wind_gust']} mph")
+            st.metric("Wind", f"{weather['wind_speed']} mph", f"{weather['wind_dir']}")
+        with c3:
+            st.metric("Gust", f"{weather['wind_gust']} mph")
     
     st.divider()
     st.divider()
