@@ -388,6 +388,9 @@ def change_hole(delta):
 # Mobile Navigation - Moved to Sticky Footer later
 # But we need input handling logic here for the session state score
 
+# --- FIX: Ensure hole_num is defined from session state ---
+hole_num = st.session_state.hole_input
+
 
 # --- 1. RETRIEVE RELATIONAL STRATEGY & AXIOM ---
 try:
