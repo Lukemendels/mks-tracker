@@ -479,6 +479,7 @@ if not tournament_mode:
                     # Auto-log Weather
                     "temperature": weather['temp'] if weather else None,
                     "wind_speed": weather['wind_speed'] if weather else None,
+                    "wind_gust": weather['wind_gust'] if weather else None,
                     "wind_direction": weather['wind_dir'] if weather else None
                 }
                 supabase.table("practice_notes").insert(data_entry).execute()
