@@ -455,17 +455,6 @@ try:
            attack_status = ":red[🔴 SMART PLAY]"
            status_color = "red"
         
-        # --- NAVIGATION (TOP) ---
-        # User Request: Below Target, Above Header
-        c_nav_prev, c_nav_spacer, c_nav_next = st.columns([1, 4, 1])
-        with c_nav_prev:
-            if st.button("⬅️", key="nav_prev_top", use_container_width=True):
-                change_hole(-1)
-                st.rerun()
-        with c_nav_next:
-            if st.button("➡️", key="nav_next_top", use_container_width=True):
-                change_hole(1)
-                st.rerun()
 
         # --- COMPACT HUD HEADER ---
         with st.container():
@@ -639,6 +628,17 @@ if mapper_mode:
 
 # --- 2. CONDITIONAL CONTENT ---
 if not tournament_mode:
+    # --- NAVIGATION (MOVED HERE) ---
+    c_nav_1, c_nav_2 = st.columns([1, 1])
+    with c_nav_1:
+        if st.button("⬅️ Prev Hole", key="nav_prev_mid", use_container_width=True):
+            change_hole(-1)
+            st.rerun()
+    with c_nav_2:
+        if st.button("Next Hole ➡️", key="nav_next_mid", use_container_width=True):
+            change_hole(1)
+            st.rerun()
+
     tab1, tab2, tab3 = st.tabs(["📝 Hole Entry", "📊 Analysis", "📂 History & Export"])
     
     with tab1:
