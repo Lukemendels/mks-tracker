@@ -8,11 +8,37 @@ import os
 import extra_streamlit_components as stx
 from dotenv import load_dotenv
 import pytz
+from streamlit_js_eval import get_geolocation
 
 load_dotenv()
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="MKS Tracker", page_icon="🥏", layout="wide")
+
+# --- CSS: MOBILE OPTIMIZATIONS ---
+st.markdown("""
+<style>
+/* iOS Sticky Footer */
+div[data-testid="stVerticalBlock"] > div:has(div.sticky-nav) {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background-color: #0E1117; /* Dark theme match */
+    z-index: 1000;
+    padding-top: 15px;
+    padding-left: 1rem;
+    padding-right: 1rem;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom)); /* iOS Safe Area Fix */
+    border-top: 1px solid #333;
+    box-shadow: 0px -4px 10px rgba(0,0,0,0.5);
+}
+
+/* Hide Streamlit Branding features for cleaner app feel */
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+</style>
+""", unsafe_allow_html=True)
 
 # Timezone
 LOCAL_TZ = pytz.timezone('America/New_York')
@@ -24,6 +50,9 @@ cookie_manager = stx.CookieManager()
 # --- INITIALIZE SESSION STATE ---
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
+
+if 'current_score_input' not in st.session_state:
+    st.session_state.current_score_input = 3
 
 if 'current_round' not in st.session_state:
     st.session_state.current_round = None
@@ -189,12 +218,15 @@ if not st.session_state.logged_in:
 
 # --- SIDEBAR & GLOBAL SETTINGS ---
 with st.sidebar:
-    st.title("🥏 MKS Control")
+    st.title("🥏 MKS Control (v2.0)")
     tournament_mode = st.toggle("🏆 Tournament Mode", help="Hides entry forms to focus on execution.")
     if st.button("Log Out"):
         logout()
     st.divider()
 
+    # --- MAPPER MODE ---
+    mapper_mode = st.toggle("🗺️ Mapper Mode", help="Enable GPS data collection for Teepads and Baskets.")
+    
     st.header("📍 Loriella Park Conditions")
     weather = get_loriella_weather()
     if weather:
@@ -293,9 +325,7 @@ with st.sidebar:
             st.warning("No discs found in database.")
 
 # --- MAIN UI ---
-st.title("The Mendelsohn Protocol")
-# --- MAIN UI ---
-st.title("The Mendelsohn Protocol")
+# Mobile Header (HUD) replaces the standard title
 
 # Calculate Dynamic Target
 # Logic: Target = -1 * floor(Attack Holes / 2)
@@ -355,16 +385,8 @@ def change_hole(delta):
         update_hole_cookie()
 
 # Mobile Navigation
-c_prev, c_curr, c_next = st.columns([1, 2, 1])
-if c_prev.button("⬅️", use_container_width=True):
-    change_hole(-1)
-    st.rerun()
-if c_next.button("➡️", use_container_width=True):
-    change_hole(1)
-    st.rerun()
-
-with c_curr:
-    hole_num = st.number_input("Hole #", min_value=1, max_value=18, step=1, key="hole_input", on_change=update_hole_cookie, label_visibility="collapsed")
+# Mobile Navigation - Moved to Sticky Footer later
+# But we need input handling logic here for the session state score
 
 
 # --- 1. RETRIEVE RELATIONAL STRATEGY & AXIOM ---
@@ -411,40 +433,170 @@ try:
         
         # Attack Status for Header
         if attack_hole == "Yes":
-           attack_status = "🟢 ATTACK"
+           attack_status = ":red[🔴 ATTACK]"
+           status_color = "red"
         else:
-           attack_status = "⚠️ SMART PLAY"
+           attack_status = ":green[🟢 SMART PLAY]"
+           status_color = "green"
         
-        st.markdown(f"### {basket_emoji} {basket_color} Basket: Hole {hole_num} &nbsp;&nbsp;|&nbsp;&nbsp; {attack_status}")
+        # --- COMPACT HUD HEADER ---
+        with st.container():
+            c_hud_1, c_hud_2 = st.columns([2, 1])
+            with c_hud_1:
+                st.markdown(f"## Hole {hole_num} | Par {default_par}")
+            with c_hud_2:
+                st.markdown(f"### {attack_status}")
         
-        # Display Protocol
-        st.write("---")
-        
-        c1, c2 = st.columns([1, 2])
-        if suggested_disc:
-            c1.markdown(f"**🥏 Disc**\n\n{suggested_disc}")
-        if suggested_shape:
-            c2.markdown(f"**📐 Shot Shape**\n\n{suggested_shape}")
-            
-        if exec_notes:
-             st.markdown(f"**🎯 Execution Notes**\n\n{exec_notes}")
-             
-        st.write("---")
+        # --- PROTOCOL & STRATEGY (COLLAPSIBLE) ---
+        with st.expander("📋 Protocol & Strategy", expanded=True):
+             c1, c2 = st.columns([1, 1])
+             if suggested_disc:
+                 c1.markdown(f"**🥏 Disc**: {suggested_disc}")
+             if suggested_shape:
+                 c2.markdown(f"**📐 Shape**: {suggested_shape}")
+                 
+             if exec_notes:
+                  st.success(f"**Target**: {exec_notes}")
 
-
-        # Axiom display: The core of the MKS Tracker
-        if axiom:
-            st.divider()
-            st.success(f"**{axiom.get('short_name')}: {axiom.get('title')}**")
-            if axiom.get('corollary'):
-                st.info(f"*{axiom.get('corollary')}*")
-        else:
-            st.info("No specific Mindset Axiom linked to this hole yet.")
-            
+             # Axiom display
+             if axiom:
+                 st.divider()
+                 st.markdown(f"**{axiom.get('short_name')}: {axiom.get('title')}**")
+                 if axiom.get('corollary'):
+                     st.caption(f"*{axiom.get('corollary')}*")
     else:
         st.warning(f"No protocol notes found for Hole {hole_num} on {layout}.")
 except Exception as e:
     st.error(f"Error retrieving protocol: {e}")
+
+# --- MAPPER MODE INTERFACE ---
+if mapper_mode:
+    st.write("---")
+    st.subheader("🗺️ Mapper Mode")
+    
+    # 1. Check if already verified
+    is_verified = False
+    existing_geo = None
+    try:
+        geo_res = supabase.table("hole_geometry").select("*").eq("hole_number", hole_num).eq("layout", layout).execute()
+        if geo_res.data:
+            existing_geo = geo_res.data[0]
+            if existing_geo.get('verified'):
+                is_verified = True
+    except Exception as e:
+        st.error(f"Error checking geometry: {e}")
+
+    if is_verified:
+        st.success(f"✅ Geometry Verified for Hole {hole_num} ({layout})")
+        if existing_geo:
+             st.write(f"**Distance:** {existing_geo.get('distance_feet', 'N/A')} ft")
+             st.caption(f"Tee: {existing_geo.get('tee_lat')}, {existing_geo.get('tee_lon')}")
+             st.caption(f"Basket: {existing_geo.get('basket_lat')}, {existing_geo.get('basket_lon')}")
+    else:
+        c1, c2 = st.columns(2)
+        
+        # Helper to handle GPS save
+        def save_gps(label, lat, lon):
+            if not st.session_state.logged_in:
+                st.error("Must be logged in to map.")
+                return
+
+            try:
+                user_id = st.session_state.supabase_session.user.id
+                
+                # Check for existing to upsert
+                payload = {
+                    "hole_number": hole_num,
+                    "layout": layout,
+                    "mapped_by": user_id,
+                    "verified": False 
+                }
+                
+                if label == "tee":
+                    payload["tee_lat"] = lat
+                    payload["tee_lon"] = lon
+                elif label == "basket":
+                    payload["basket_lat"] = lat
+                    payload["basket_lon"] = lon
+                
+                # We need to upsert. key is (hole_number, layout)
+                # But supabase upsert needs all required fields or it might fail if row doesn't exist?
+                # Actually, if we are creating a NEW row, we need hole_number and layout.
+                # If updating, we just need the key.
+                
+                # First try to get existing again to merge?
+                # Actually upsert with on_conflict should work if we provide the keys.
+                
+                # Merge with existing data if present in session (to avoid overwriting other point with null if partially mapped)
+                # Better: SELECT first, then UPDATE/INSERT.
+                
+                current_data = {}
+                if existing_geo:
+                    current_data = existing_geo.copy()
+                    # Remove id/created_at to avoid issues?
+                    # actually just update the changed fields.
+                    
+                    if label == "tee":
+                        supabase.table("hole_geometry").update({
+                            "tee_lat": lat, 
+                            "tee_lon": lon,
+                            "mapped_by": user_id
+                        }).eq("id", existing_geo['id']).execute()
+                    else:
+                         supabase.table("hole_geometry").update({
+                            "basket_lat": lat, 
+                            "basket_lon": lon,
+                            "mapped_by": user_id
+                        }).eq("id", existing_geo['id']).execute()
+                else:
+                    # Insert new
+                    payload["distance_feet"] = None # Reset if new
+                    payload["elevation_change_feet"] = None
+                    supabase.table("hole_geometry").insert(payload).execute()
+                    
+                st.toast(f"{label.capitalize()} Set! ({lat:.5f}, {lon:.5f})", icon="📍")
+                time.sleep(1)
+                st.rerun()
+                
+            except Exception as e:
+                st.error(f"Save failed: {e}")
+
+        with c1:
+            st.caption("Teepad")
+            if existing_geo and existing_geo.get('tee_lat'):
+                st.write(f"✅ {existing_geo['tee_lat']:.5f}, {existing_geo['tee_lon']:.5f}")
+            
+            # Button for Tee
+            # Note: get_geolocation returns None initially, then a dict with 'coords'.
+            # We use a key to force uniqueness.
+            loc_tee = get_geolocation(component_key=f"gps_tee_{hole_num}_{layout}")
+            if loc_tee and 'coords' in loc_tee:
+                lat = loc_tee['coords']['latitude']
+                lon = loc_tee['coords']['longitude']
+                # Only save if different? Or just save.
+                # To avoid infinite loop, we check if we just saved this.
+                # We can store last_saved in session_state
+                
+                last_saved_key = f"last_saved_tee_{hole_num}_{layout}"
+                if st.session_state.get(last_saved_key) != f"{lat},{lon}":
+                     save_gps("tee", lat, lon)
+                     st.session_state[last_saved_key] = f"{lat},{lon}"
+
+        with c2:
+            st.caption("Basket")
+            if existing_geo and existing_geo.get('basket_lat'):
+                 st.write(f"✅ {existing_geo['basket_lat']:.5f}, {existing_geo['basket_lon']:.5f}")
+            
+            loc_basket = get_geolocation(component_key=f"gps_basket_{hole_num}_{layout}")
+            if loc_basket and 'coords' in loc_basket:
+                lat = loc_basket['coords']['latitude']
+                lon = loc_basket['coords']['longitude']
+                
+                last_saved_key = f"last_saved_basket_{hole_num}_{layout}"
+                if st.session_state.get(last_saved_key) != f"{lat},{lon}":
+                     save_gps("basket", lat, lon)
+                     st.session_state[last_saved_key] = f"{lat},{lon}"
+
 
 # --- 2. CONDITIONAL CONTENT ---
 if not tournament_mode:
@@ -513,38 +665,89 @@ if not tournament_mode:
             if suggested_shape and suggested_shape in shape_options:
                 default_shape_index = shape_options.index(suggested_shape)
             
-            disc_choice = st.selectbox("Disc Used", all_discs, index=default_disc_index)
-            c1, c2, c3 = st.columns(3)
-            with c1: shot_shape = st.selectbox("Shape", shape_options, index=default_shape_index)
-            with c2: rating = st.slider("Confidence", 1, 5, 3)
-            with c3: strokes = st.number_input("Strokes", 1, 15, value=default_par)
-            notes_input = st.text_area("Adjustment Notes")
-            
+            # --- INPUT MODERNIZATION ---
+            # 1. Disc Pills
+            # Note: st.pills introduced in recent versions. Fallback to radio if older? We checked 1.54.
+            disc_choice = st.pills("Disc Selection", all_discs, default=all_discs[default_disc_index] if all_discs else None, selection_mode="single")
+            if not disc_choice and all_discs: 
+                disc_choice = all_discs[default_disc_index]
 
-            if st.form_submit_button("💾 Save Data", use_container_width=True):
-                data_entry = {
-                    "hole_number": hole_num,
-                    "layout": layout,
-                    "disc_used": disc_choice,
-                    "result_rating": rating,
-                    "strokes": strokes,
-                    "notes": f"[{shot_shape}] {notes_input}",
-                    "strokes": strokes,
-                    "notes": f"[{shot_shape}] {notes_input}",
-                    "created_at": datetime.now(LOCAL_TZ).isoformat(),
-                    "round_id": st.session_state.current_round['id'] if st.session_state.current_round else None,
-                    # Auto-log Weather
-                    "round_id": st.session_state.current_round['id'] if st.session_state.current_round else None,
-                    # Auto-log Weather
-                    "temperature": weather['temp'] if weather else None,
-                    "wind_speed": weather['wind_speed'] if weather else None,
-                    "wind_gust": weather['wind_gust'] if weather else None,
-                    "wind_direction": weather['wind_dir'] if weather else None
-                }
-                supabase.table("practice_notes").insert(data_entry).execute()
-                st.toast("Hole Saved!", icon="✅")
-                time.sleep(1)
-                st.rerun()
+            st.divider()
+
+            # 2. Shot Shape Segmented Control
+            shot_shape = st.segmented_control("Shape", shape_options, default=shape_options[default_shape_index], selection_mode="single")
+            if not shot_shape: shot_shape = "Straight" # Default
+
+            st.divider()
+            
+            # 3. Big Button Scoring
+            st.caption("Score (Strokes)")
+            c_score_sub, c_score_disp, c_score_add = st.columns([1, 2, 1])
+            
+            # Callbacks for score
+            def decrement_score():
+                if st.session_state.current_score_input > 1:
+                    st.session_state.current_score_input -= 1
+            def increment_score():
+                 st.session_state.current_score_input += 1
+            
+            # Sync session state default if not set for this hole context logic (re-using old logic partially)
+            # Actually, let's just default to Par content if we changed holes?
+            # For simplicity, we stick to session state.
+            
+            with c_score_sub:
+                st.button("➖", on_click=decrement_score, use_container_width=True)
+            with c_score_disp:
+                st.markdown(f"<h1 style='text-align: center; margin: 0; padding: 0;'>{st.session_state.current_score_input}</h1>", unsafe_allow_html=True)
+            with c_score_add:
+                st.button("➕", on_click=increment_score, use_container_width=True)
+                
+            rating = st.slider("Confidence", 1, 5, 3)
+            notes_input = st.text_area("Adjustment Notes", placeholder="What happened?")
+            
+            # --- STICKY FOOTER ---
+            # Wrapped in form submit button? No, the sticky footer needs to be outside the form if it contains navigation.
+            # But the "Save Data" button IS the submit button for the form.
+            # Streamlit forms cannot span outside containers easily. 
+            # Solution: We close the form here with the submit button, 
+            # BUT we want the buttons at the bottom.
+            # CSS handles the position. We just need to make sure it's inside the form if it's the submit button.
+            
+            st.markdown('<div class="sticky-nav">', unsafe_allow_html=True)
+            f1, f2, f3 = st.columns([1, 2, 1])
+            with f1:
+                if st.button("⬅️", use_container_width=True):
+                    change_hole(-1)
+                    st.rerun()
+            with f2:
+                if st.form_submit_button("✅ Save & Next", use_container_width=True):
+                    data_entry = {
+                        "hole_number": hole_num,
+                        "layout": layout,
+                        "disc_used": disc_choice,
+                        "result_rating": rating,
+                        "strokes": st.session_state.current_score_input,
+                        "notes": f"[{shot_shape}] {notes_input}",
+                        "created_at": datetime.now(LOCAL_TZ).isoformat(),
+                        "round_id": st.session_state.current_round['id'] if st.session_state.current_round else None,
+                        # Auto-log Weather
+                        "temperature": weather['temp'] if weather else None,
+                        "wind_speed": weather['wind_speed'] if weather else None,
+                        "wind_gust": weather['wind_gust'] if weather else None,
+                        "wind_direction": weather['wind_dir'] if weather else None
+                    }
+                    supabase.table("practice_notes").insert(data_entry).execute()
+                    st.toast("Hole Saved!", icon="✅")
+                    
+                    # Auto Advance
+                    change_hole(1)
+                    time.sleep(0.5)
+                    st.rerun()
+            with f3:
+                 if st.button("➡️", use_container_width=True):
+                    change_hole(1)
+                    st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
     with tab2:
         st.subheader("📊 Performance Review & Analysis")

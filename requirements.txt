@@ -6,3 +6,5 @@ python-dotenv
 psycopg2-binary
 extra-streamlit-components
 pytz
+streamlit-js-eval
+geopy
