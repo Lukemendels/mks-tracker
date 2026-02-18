@@ -49,6 +49,12 @@ footer {visibility: hidden;}
 # Timezone
 LOCAL_TZ = pytz.timezone('America/New_York')
 
+# --- GEO LOCATION STATE ---
+if 'mapping_tee_active' not in st.session_state:
+    st.session_state.mapping_tee_active = False
+if 'mapping_basket_active' not in st.session_state:
+    st.session_state.mapping_basket_active = False
+
 # --- INITIALIZE COOKIE MANAGER ---
 # --- INITIALIZE COOKIE MANAGER ---
 cookie_manager = stx.CookieManager()
@@ -591,31 +597,44 @@ if mapper_mode:
             if existing_geo and existing_geo.get('tee_lat'):
                 st.write(f"✅ {existing_geo['tee_lat']:.5f}, {existing_geo['tee_lon']:.5f}")
             
-             # Button for Tee
-            loc_tee = get_geolocation(component_key=f"gps_tee_{hole_num}_{layout}", btn_text="📍 Set Teepad")
-            if loc_tee and 'coords' in loc_tee:
-                lat = loc_tee['coords']['latitude']
-                lon = loc_tee['coords']['longitude']
+            # Interactive Teepad Button
+            if st.button("📍 Set Teepad"):
+                st.session_state.mapping_tee_active = True
+                st.session_state.mapping_basket_active = False # One at a time
                 
-                last_saved_key = f"last_saved_tee_{hole_num}_{layout}"
-                if st.session_state.get(last_saved_key) != f"{lat},{lon}":
-                     save_gps("tee", lat, lon)
-                     st.session_state[last_saved_key] = f"{lat},{lon}"
+            if st.session_state.mapping_tee_active:
+                st.info("Locating Teepad...")
+                loc_tee = get_geolocation(component_key=f"gps_tee_{hole_num}_{layout}")
+                
+                if loc_tee and 'coords' in loc_tee:
+                    lat = loc_tee['coords']['latitude']
+                    lon = loc_tee['coords']['longitude']
+                    
+                    save_gps("tee", lat, lon)
+                    st.session_state.mapping_tee_active = False # Reset
+                    st.rerun()
 
         with c2:
             st.caption(f"Basket ({basket_color})")
             if existing_geo and existing_geo.get('basket_lat'):
                  st.write(f"✅ {existing_geo['basket_lat']:.5f}, {existing_geo['basket_lon']:.5f}")
             
-            loc_basket = get_geolocation(component_key=f"gps_basket_{hole_num}_{layout}", btn_text="🏁 Set Basket")
-            if loc_basket and 'coords' in loc_basket:
-                lat = loc_basket['coords']['latitude']
-                lon = loc_basket['coords']['longitude']
+            # Interactive Basket Button
+            if st.button("🏁 Set Basket"):
+                st.session_state.mapping_basket_active = True
+                st.session_state.mapping_tee_active = False
+            
+            if st.session_state.mapping_basket_active:
+                st.info("Locating Basket...")
+                loc_basket = get_geolocation(component_key=f"gps_basket_{hole_num}_{layout}")
                 
-                last_saved_key = f"last_saved_basket_{hole_num}_{layout}"
-                if st.session_state.get(last_saved_key) != f"{lat},{lon}":
-                     save_gps("basket", lat, lon)
-                     st.session_state[last_saved_key] = f"{lat},{lon}"
+                if loc_basket and 'coords' in loc_basket:
+                    lat = loc_basket['coords']['latitude']
+                    lon = loc_basket['coords']['longitude']
+                    
+                    save_gps("basket", lat, lon)
+                    st.session_state.mapping_basket_active = False
+                    st.rerun()
 
 
 # --- 2. CONDITIONAL CONTENT ---
