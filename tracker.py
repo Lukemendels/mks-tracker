@@ -7,11 +7,15 @@ import requests
 import os
 import extra_streamlit_components as stx
 from dotenv import load_dotenv
+import pytz
 
 load_dotenv()
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="MKS Tracker", page_icon="🥏", layout="wide")
+
+# Timezone
+LOCAL_TZ = pytz.timezone('America/New_York')
 
 # --- INITIALIZE COOKIE MANAGER ---
 # --- INITIALIZE COOKIE MANAGER ---
@@ -119,7 +123,7 @@ def login():
                         st.session_state.supabase_session = response.session
                         
                         # Save Refresh Token to Cookie (30 days)
-                        cookie_manager.set('mks_refresh_token', response.session.refresh_token, expires_at=datetime.now() + pd.Timedelta(days=30))
+                        cookie_manager.set('mks_refresh_token', response.session.refresh_token, expires_at=datetime.now(LOCAL_TZ) + pd.Timedelta(days=30))
                         
                         st.success("Login Successful!")
                         time.sleep(0.5)
@@ -225,7 +229,7 @@ with st.sidebar:
             selected_bag = st.multiselect("Select Discs for Round", default_discs, default=default_discs)
         
         if st.button("Start Round", type="primary"):
-            round_name = f"{datetime.now().strftime('%m-%d-%y-%I%M%p')}-{layout.split(' ')[0]}"
+            round_name = f"{datetime.now(LOCAL_TZ).strftime('%m-%d-%y-%I%M%p')}-{layout.split(' ')[0]}"
             
             # Create Round in DB
             new_round_id = None
@@ -249,7 +253,7 @@ with st.sidebar:
                 "selected_discs": selected_bag
             }
             if new_round_id:
-                cookie_manager.set('mks_round_id', new_round_id, expires_at=datetime.now() + pd.Timedelta(days=1))
+                cookie_manager.set('mks_round_id', new_round_id, expires_at=datetime.now(LOCAL_TZ) + pd.Timedelta(days=1))
             st.rerun()
 
     
@@ -491,7 +495,11 @@ if not tournament_mode:
                     "result_rating": rating,
                     "strokes": strokes,
                     "notes": f"[{shot_shape}] {notes_input}",
-                    "created_at": datetime.now().isoformat(),
+                    "strokes": strokes,
+                    "notes": f"[{shot_shape}] {notes_input}",
+                    "created_at": datetime.now(LOCAL_TZ).isoformat(),
+                    "round_id": st.session_state.current_round['id'] if st.session_state.current_round else None,
+                    # Auto-log Weather
                     "round_id": st.session_state.current_round['id'] if st.session_state.current_round else None,
                     # Auto-log Weather
                     "temperature": weather['temp'] if weather else None,
