@@ -198,7 +198,7 @@ with st.sidebar:
         with c1:
             st.metric("Temp", f"{weather['temp']}°F", f"{weather['feels_like']}°F")
         with c2:
-            st.metric("Wind", f"{weather['wind_speed']} mph", f"{weather['wind_dir']}")
+            st.metric("Wind", f"{weather['wind_speed']} mph", f"Gust: {weather['wind_gust']} mph")
     
     st.divider()
     st.divider()
