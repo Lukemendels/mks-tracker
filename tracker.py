@@ -105,6 +105,63 @@ if not st.session_state.current_round:
                      cookie_manager.delete('mks_round_id')
         except: pass
 
+# 3. Smart Resume: Check for active rounds in the last 3 hours if none loaded
+if not st.session_state.current_round and st.session_state.logged_in and not OFFLINE_MODE:
+    try:
+        # Calculate time threshold (3 hours ago)
+        # created_at is likely UTC ISO string in Supabase
+        # We'll just fetch the most recent round and check its time in python to be safe with formats
+        
+        my_id = st.session_state.supabase_session.user.id
+        
+        # Fetch last round for this user
+        res = supabase.table("rounds").select("*").eq("user_id", my_id).order("created_at", desc=True).limit(1).execute()
+        
+        if res.data:
+            last_round = res.data[0]
+            created_at_str = last_round['created_at']
+            # Parse ISO
+            created_dt = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
+            
+            # Current UTC
+            now_utc = datetime.now(pytz.utc)
+            
+            # Diff
+            diff = now_utc - created_dt
+            
+            if diff.total_seconds() < (3 * 3600): # 3 hours
+                st.session_state.current_round = last_round
+                st.toast(f"Resumed Active Round: {last_round['name']}", icon="🔄")
+                
+                # Update Cookie
+                cookie_manager.set('mks_round_id', last_round['id'], expires_at=datetime.now(LOCAL_TZ) + pd.Timedelta(days=1))
+                
+                # --- AUTO-JUMP TO NEXT HOLE ---
+                # Check practice notes for max hole number
+                try:
+                    notes_res = supabase.table("practice_notes")\
+                        .select("hole_number")\
+                        .eq("round_id", last_round['id'])\
+                        .order("hole_number", desc=True)\
+                        .limit(1)\
+                        .execute()
+                    
+                    if notes_res.data:
+                        last_hole = notes_res.data[0]['hole_number']
+                        next_hole = min(last_hole + 1, 18)
+                        
+                        # Set session state and cookie for hole
+                        if 'hole_input' not in st.session_state or st.session_state.hole_input == 1:
+                             st.session_state.hole_input = next_hole
+                             cookie_manager.set('mks_hole_num', next_hole)
+                             
+                except Exception as e:
+                    pass # Fail silently on hole jump
+                    
+    except Exception as e:
+        # st.error(f"Resume check failed: {e}") # Debug only
+        pass
+
 
 
 
@@ -152,6 +209,7 @@ def login():
     with st.form("login_form"):
         email = st.text_input("Email")
         password = st.text_input("Password", type="password")
+        remember_me = st.checkbox("Remember Me (30 Days)")
         submit = st.form_submit_button("Log In", use_container_width=True)
         if submit:
             if OFFLINE_MODE:
@@ -163,8 +221,11 @@ def login():
                         st.session_state.logged_in = True
                         st.session_state.supabase_session = response.session
                         
-                        # Save Refresh Token to Cookie (30 days)
-                        cookie_manager.set('mks_refresh_token', response.session.refresh_token, expires_at=datetime.now(LOCAL_TZ) + pd.Timedelta(days=30))
+                        # Save Refresh Token
+                        # If Remember Me: 30 days. Else: Session only (or minimal persistence like 1 day for UX)
+                        expire_time = datetime.now(LOCAL_TZ) + pd.Timedelta(days=30) if remember_me else datetime.now(LOCAL_TZ) + pd.Timedelta(hours=12)
+                        
+                        cookie_manager.set('mks_refresh_token', response.session.refresh_token, expires_at=expire_time)
                         
                         st.success("Login Successful!")
                         time.sleep(0.5)
@@ -271,6 +332,9 @@ with st.sidebar:
         
         with st.expander("🎒 Bag Setup", expanded=False):
             selected_bag = st.multiselect("Select Discs for Round", default_discs, default=default_discs)
+            
+        # Starting Hole Selection
+        start_hole = st.selectbox("Starting Hole", range(1, 19), index=0)
         
         if st.button("Start Round", type="primary"):
             round_name = f"{datetime.now(LOCAL_TZ).strftime('%m-%d-%y-%I%M%p')}-{layout.split(' ')[0]}"
@@ -296,6 +360,10 @@ with st.sidebar:
                 "layout": layout,
                 "selected_discs": selected_bag
             }
+            # Set starting hole
+            st.session_state.hole_input = start_hole
+            cookie_manager.set('mks_hole_num', start_hole)
+            
             if new_round_id:
                 cookie_manager.set('mks_round_id', new_round_id, expires_at=datetime.now(LOCAL_TZ) + pd.Timedelta(days=1))
             st.rerun()
@@ -668,55 +736,12 @@ if not tournament_mode:
         with st.container():
             st.subheader(f"Log Practice: Hole {hole_num}")
             
-            # Fetch discs and sort
-            bag_data = get_bag()
+            # --- SIMPLIFIED UI ---
+            # Removed: Disc Pills, Shot Shape Segmeted Control
+            # Added: Generic Notes Text Area
             
-            # Filter by active round
-            if st.session_state.current_round and bag_data:
-                allowed = set(st.session_state.current_round['selected_discs'])
-                bag_data = [d for d in bag_data if d['name'] in allowed]
+            notes_input = st.text_area("Log / Notes", placeholder="Disc used, Shot Shape, Result details...", height=150)
             
-            # Custom Sort Order: Fairway -> Distance -> Mid -> Putter
-            type_order = {
-                "Fairway Driver": 0, 
-                "Distance Driver": 1, 
-                "Midrange": 2, 
-                "Putter": 3, 
-                "Approach": 4
-            }
-            
-            if bag_data:
-                 bag_data.sort(key=lambda x: (type_order.get(x.get('disc_type', ''), 99), x['name']))
-
-            all_discs = [d['name'] for d in bag_data] if bag_data else ["Unknown"]
-            
-            # Determine Index for Suggested Disc
-            default_disc_index = 0
-            if suggested_disc:
-                try:
-                    default_disc_index = all_discs.index(suggested_disc)
-                except ValueError:
-                    pass # Suggested disc not in current bag
-            
-            # DEFAULT SHAPE Logic
-            shape_options = ["Straight", "Hyzer", "Anhyzer", "Flex", "Flip"]
-            default_shape_index = 0
-            if suggested_shape and suggested_shape in shape_options:
-                default_shape_index = shape_options.index(suggested_shape)
-            
-            # --- INPUT MODERNIZATION ---
-            # 1. Disc Pills
-            # Note: st.pills introduced in recent versions. Fallback to radio if older? We checked 1.54.
-            disc_choice = st.pills("Disc Selection", all_discs, default=all_discs[default_disc_index] if all_discs else None, selection_mode="single")
-            if not disc_choice and all_discs: 
-                disc_choice = all_discs[default_disc_index]
-
-            st.divider()
-
-            # 2. Shot Shape Segmented Control
-            shot_shape = st.segmented_control("Shape", shape_options, default=shape_options[default_shape_index], selection_mode="single")
-            if not shot_shape: shot_shape = "Straight" # Default
-
             st.divider()
             
             # 3. Big Button Scoring
@@ -742,36 +767,38 @@ if not tournament_mode:
                 st.button("➕", on_click=increment_score, use_container_width=True)
                 
             rating = st.slider("Confidence", 1, 5, 3)
-            notes_input = st.text_area("Adjustment Notes", placeholder="What happened?")
+            # notes_input moved up
             
             # --- STICKY FOOTER ---
             # Use a container with a marker for CSS targeting
             with st.container():
                 st.markdown('<div class="sticky-nav-marker"></div>', unsafe_allow_html=True)
                 # Centered Save Button
-                if st.button("✅ Save & Next", use_container_width=True, type="primary"):
-                    data_entry = {
-                        "hole_number": hole_num,
-                        "layout": layout,
-                        "disc_used": disc_choice,
-                        "result_rating": rating,
-                        "strokes": st.session_state.current_score_input,
-                        "notes": f"[{shot_shape}] {notes_input}",
-                        "created_at": datetime.now(LOCAL_TZ).isoformat(),
-                        "round_id": st.session_state.current_round['id'] if st.session_state.current_round else None,
-                        # Auto-log Weather
-                        "temperature": weather['temp'] if weather else None,
-                        "wind_speed": weather['wind_speed'] if weather else None,
-                        "wind_gust": weather['wind_gust'] if weather else None,
-                        "wind_direction": weather['wind_dir'] if weather else None
-                    }
-                    supabase.table("practice_notes").insert(data_entry).execute()
-                    st.toast("Hole Saved!", icon="✅")
-                    
-                    # Auto Advance
-                    change_hole(1)
-                    time.sleep(0.5)
-                    st.rerun()
+                f1, f2, f3 = st.columns([1, 2, 1])
+                with f2:
+                    if st.button("✅ Save & Next", use_container_width=True, type="primary"):
+                        data_entry = {
+                            "hole_number": hole_num,
+                            "layout": layout,
+                            "disc_used": None, # Specific selection removed in Simplified UI
+                            "result_rating": rating,
+                            "strokes": st.session_state.current_score_input,
+                            "notes": notes_input, # Everything goes here
+                            "created_at": datetime.now(LOCAL_TZ).isoformat(),
+                            "round_id": st.session_state.current_round['id'] if st.session_state.current_round else None,
+                            # Auto-log Weather
+                            "temperature": weather['temp'] if weather else None,
+                            "wind_speed": weather['wind_speed'] if weather else None,
+                            "wind_gust": weather['wind_gust'] if weather else None,
+                            "wind_direction": weather['wind_dir'] if weather else None
+                        }
+                        supabase.table("practice_notes").insert(data_entry).execute()
+                        st.toast("Hole Saved!", icon="✅")
+                        
+                        # Auto Advance
+                        change_hole(1)
+                        time.sleep(0.5)
+                        st.rerun()
 
     with tab2:
         st.subheader("📊 Performance Review & Analysis")
