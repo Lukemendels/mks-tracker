@@ -324,6 +324,23 @@ with st.sidebar:
             st.session_state.current_round = None
             cookie_manager.delete('mks_round_id')
             st.rerun()
+            
+        with st.popover("🗑️ Cancel Round", use_container_width=True):
+            st.warning("Are you sure? This will delete all data for this round.")
+            if st.button("Yes, Delete Round", type="primary"):
+                try:
+                    # Delete notes first
+                    supabase.table("practice_notes").delete().eq("round_id", st.session_state.current_round['id']).execute()
+                    # Delete round
+                    supabase.table("rounds").delete().eq("id", st.session_state.current_round['id']).execute()
+                    
+                    st.session_state.current_round = None
+                    cookie_manager.delete('mks_round_id')
+                    st.success("Round Deleted")
+                    time.sleep(1)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error canceling round: {e}")
     else:
         st.subheader("🚀 Start New Round")
         layout = st.radio("Layout", ["Shorts (Round 1)", "Longs (Round 2)"])
