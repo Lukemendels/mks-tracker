@@ -49,6 +49,41 @@ footer {visibility: hidden;}
 # Timezone
 LOCAL_TZ = pytz.timezone('America/New_York')
 
+# --- CONNECT TO SUPABASE ---
+try:
+    # 1. Try local environment variables first
+    SUPABASE_URL = os.environ.get("SUPABASE_URL")
+    SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_KEY")
+
+    # 2. Fallback to Streamlit secrets (Exact keys from original code)
+    if not SUPABASE_URL and "SUPABASE_URL" in st.secrets:
+        SUPABASE_URL = st.secrets["SUPABASE_URL"]
+    
+    if not SUPABASE_KEY and "SUPABASE_KEY" in st.secrets:
+        SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        raise ValueError("Supabase credentials not found.")
+
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    
+    # Restore session if it exists
+    if "supabase_session" in st.session_state:
+        try:
+            supabase.auth.set_session(
+                st.session_state.supabase_session.access_token, 
+                st.session_state.supabase_session.refresh_token
+            )
+        except Exception as e:
+            # Session might be expired
+            del st.session_state.supabase_session
+            
+    OFFLINE_MODE = False
+except Exception as e:
+    st.error(f"Connection Error: {e}")
+    st.caption("Please check your .streamlit/secrets.toml or Streamlit Cloud Secrets.")
+    OFFLINE_MODE = True
+
 # --- GEO LOCATION STATE ---
 if 'mapping_tee_active' not in st.session_state:
     st.session_state.mapping_tee_active = False
@@ -168,39 +203,6 @@ if not st.session_state.current_round and st.session_state.logged_in and not OFF
 # --- CONNECT TO SUPABASE ---
 # --- CONNECT TO SUPABASE ---
 # --- CONNECT TO SUPABASE ---
-try:
-    # 1. Try local environment variables first
-    SUPABASE_URL = os.environ.get("SUPABASE_URL")
-    SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_KEY")
-
-    # 2. Fallback to Streamlit secrets (Exact keys from original code)
-    if not SUPABASE_URL and "SUPABASE_URL" in st.secrets:
-        SUPABASE_URL = st.secrets["SUPABASE_URL"]
-    
-    if not SUPABASE_KEY and "SUPABASE_KEY" in st.secrets:
-        SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
-
-    if not SUPABASE_URL or not SUPABASE_KEY:
-        raise ValueError("Supabase credentials not found.")
-
-    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-    
-    # Restore session if it exists
-    if "supabase_session" in st.session_state:
-        try:
-            supabase.auth.set_session(
-                st.session_state.supabase_session.access_token, 
-                st.session_state.supabase_session.refresh_token
-            )
-        except Exception as e:
-            # Session might be expired
-            del st.session_state.supabase_session
-            
-    OFFLINE_MODE = False
-except Exception as e:
-    st.error(f"Connection Error: {e}")
-    st.caption("Please check your .streamlit/secrets.toml or Streamlit Cloud Secrets.")
-    OFFLINE_MODE = True
 
 # --- AUTHENTICATION FUNCTIONS ---
 def login():
