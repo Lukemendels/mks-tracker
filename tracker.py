@@ -165,13 +165,15 @@ if not st.session_state.current_round and st.session_state.logged_in and not OFF
             diff = now_utc - created_dt
             
             if diff.total_seconds() < (3 * 3600): # 3 hours
-                st.session_state.current_round = last_round
-                st.toast(f"Resumed Active Round: {last_round['name']}", icon="🔄")
-                
-                # Update Cookie
-                cookie_manager.set('mks_round_id', last_round['id'], expires_at=datetime.now(LOCAL_TZ) + pd.Timedelta(days=1))
-                
-                # --- AUTO-JUMP TO NEXT HOLE ---
+                # Check if round is ended (ended_at is NOT None)
+                if not last_round.get('ended_at'):
+                    st.session_state.current_round = last_round
+                    st.toast(f"Resumed Active Round: {last_round['name']}", icon="🔄")
+                    
+                    # Update Cookie
+                    cookie_manager.set('mks_round_id', last_round['id'], expires_at=datetime.now(LOCAL_TZ) + pd.Timedelta(days=1))
+                    
+                    # --- AUTO-JUMP TO NEXT HOLE ---
                 # Check practice notes for max hole number
                 try:
                     notes_res = supabase.table("practice_notes")\
@@ -321,6 +323,13 @@ with st.sidebar:
         st.caption(f"Layout: {layout}")
         
         if st.button("End Round", type="primary"):
+            # Mark as ended in DB
+            try:
+                now_iso = datetime.now(LOCAL_TZ).isoformat()
+                supabase.table("rounds").update({"ended_at": now_iso}).eq("id", st.session_state.current_round['id']).execute()
+            except Exception as e:
+                st.error(f"Error saving end state: {e}")
+            
             st.session_state.current_round = None
             cookie_manager.delete('mks_round_id')
             st.rerun()
